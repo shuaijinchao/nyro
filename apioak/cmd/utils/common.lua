@@ -22,14 +22,16 @@ if script_path:sub(1, 4) == '/usr' or script_path:sub(1, 4) == '/bin' then
             .. "/usr/local/apioak/share/lua/5.1/?/init.lua;"
             .. package.path
 else
-    -- 开发模式：使用 lua_modules
+    -- 开发模式：优先使用源码，依赖使用 lua_modules
     apioak_home = trim(execute_cmd("pwd"))
     local lua_modules_path = apioak_home .. "/lua_modules"
 
     package.cpath = lua_modules_path .. "/lib/lua/5.1/?.so;"
             .. package.cpath
 
-    package.path = lua_modules_path .. "/share/lua/5.1/?.lua;"
+    package.path = apioak_home .. "/?.lua;"
+            .. apioak_home .. "/?/init.lua;"
+            .. lua_modules_path .. "/share/lua/5.1/?.lua;"
             .. lua_modules_path .. "/share/lua/5.1/?/init.lua;"
             .. package.path
 end

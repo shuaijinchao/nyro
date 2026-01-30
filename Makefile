@@ -5,6 +5,14 @@ APIOAK_DIR       ?= /usr/local/apioak
 # Rockspec file
 ROCKSPEC         := rockspec/apioak-master-0.rockspec
 
+# Router engine library
+ROUTER_LIB_DIR   := deps/apioak
+ifeq ($(UNAME), Darwin)
+    ROUTER_LIB   := libapioak_router.dylib
+else
+    ROUTER_LIB   := libapioak_router.so
+endif
+
 # Detect OpenResty LuaJIT path
 ifeq ($(UNAME), Darwin)
 	# macOS with Homebrew OpenResty
@@ -22,23 +30,30 @@ endif
 
 .PHONY: install
 install:
+	@echo "Building apioak_router C library..."
+	cd $(ROUTER_LIB_DIR) && make
+	@echo "Installing apioak_router library to system..."
+	cd $(ROUTER_LIB_DIR) && make install
 	@echo "Installing APIOAK using luarocks..."
 	@echo "Using Lua/LuaJIT at: $(LUAJIT_DIR)"
 	luarocks make $(ROCKSPEC) --tree=$(APIOAK_DIR) $(LUAROCKS_FLAGS)
 	@echo "Installing binary and configuration files..."
 	@mkdir -p $(APIOAK_DIR)/bin
 	@mkdir -p $(APIOAK_DIR)/conf/cert
+	@mkdir -p $(APIOAK_DIR)/lib
 	@install -m 755 bin/apioak $(APIOAK_DIR)/bin/apioak
 	@install -m 644 conf/apioak.yaml $(APIOAK_DIR)/conf/apioak.yaml
 	@install -m 644 conf/nginx.conf $(APIOAK_DIR)/conf/nginx.conf
 	@install -m 644 conf/mime.types $(APIOAK_DIR)/conf/mime.types
 	@install -m 644 conf/cert/apioak.crt $(APIOAK_DIR)/conf/cert/apioak.crt
 	@install -m 600 conf/cert/apioak.key $(APIOAK_DIR)/conf/cert/apioak.key
+	@cp $(ROUTER_LIB_DIR)/$(ROUTER_LIB) $(APIOAK_DIR)/lib/
 	@echo ""
 	@echo "✅ Installation complete!"
 	@echo ""
 	@echo "APIOAK modules installed to: $(APIOAK_DIR)/share/lua/5.1/"
 	@echo "APIOAK dependencies installed to: $(APIOAK_DIR)/lib/lua/5.1/"
+	@echo "Router engine installed to: $(APIOAK_DIR)/lib/$(ROUTER_LIB)"
 	@echo "Binary installed to: $(APIOAK_DIR)/bin/apioak"
 	@echo "Configuration files installed to: $(APIOAK_DIR)/conf/"
 	@echo ""
@@ -51,6 +66,10 @@ install:
 
 .PHONY: dev
 dev:
+	@echo "Building apioak_router C library..."
+	cd $(ROUTER_LIB_DIR) && make
+	@echo "Installing apioak_router library for development..."
+	cd $(ROUTER_LIB_DIR) && make dev
 	@echo "Installing APIOAK for development..."
 	@echo "Using Lua/LuaJIT at: $(LUAJIT_DIR)"
 	luarocks make $(ROCKSPEC) --tree=./lua_modules $(LUAROCKS_FLAGS)
@@ -62,6 +81,7 @@ dev:
 	@echo "  ./bin/apioak start"
 	@echo ""
 	@echo "Note: The CLI automatically detects ./lua_modules/ and adds it to the search path."
+	@echo "      Router engine library is at: ./lua_modules/lib/$(ROUTER_LIB)"
 
 .PHONY: uninstall
 uninstall:
@@ -70,10 +90,13 @@ uninstall:
 	@echo "Removing binary and configuration files..."
 	@$(REMOVE) $(APIOAK_DIR)/bin/apioak
 	@$(REMOVE) $(APIOAK_DIR)/conf
+	@$(REMOVE) $(APIOAK_DIR)/lib/$(ROUTER_LIB)
 	@echo "APIOAK has been uninstalled."
 
 .PHONY: clean
 clean:
+	@echo "Cleaning apioak_router build files..."
+	cd $(ROUTER_LIB_DIR) && make clean
 	@echo "Cleaning local development installation..."
 	$(REMOVE) ./lua_modules
 	@echo "Clean complete!"
@@ -82,10 +105,10 @@ clean:
 help:
 	@echo "APIOAK Makefile targets:"
 	@echo ""
-	@echo "  make install     - Install APIOAK and all dependencies to $(APIOAK_DIR)"
-	@echo "  make dev         - Install APIOAK for local development (./lua_modules)"
+	@echo "  make install     - Build C library and install APIOAK to $(APIOAK_DIR)"
+	@echo "  make dev         - Build C library and install for local development"
 	@echo "  make uninstall   - Uninstall APIOAK from $(APIOAK_DIR)"
-	@echo "  make clean       - Clean local development files"
+	@echo "  make clean       - Clean all build files and local installation"
 	@echo "  make help        - Show this help message"
 	@echo ""
 	@echo "Variables:"
@@ -93,5 +116,6 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make install"
+	@echo "  make dev"
 	@echo "  make install APIOAK_DIR=/opt/apioak"
 	@echo "  make install APIOAK_DIR=/usr/local/openresty/site"

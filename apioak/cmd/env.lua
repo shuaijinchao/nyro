@@ -31,58 +31,92 @@ local function get_config()
     return config_table, nil
 end
 
-local function validate_consul()
-    local res, err = get_config()
-    if not res.consul then
-        print("Config Consul          ...FAIL (".. err ..")")
-        os.exit(1)
-    else
-        print("Config Consul          ...OK")
-    end
-
-    local conf = res.consul
-
-    local resty_consul = require("resty.consul")
-    local consul = resty_consul:new({
-        host            = conf.host or '127.0.0.1',
-        port            = conf.port or 8500,
-        connect_timeout = conf.connect_timeout or 60*1000, -- 60s
-        read_timeout    = conf.read_timeout or 60*1000, -- 60s
-        default_args    = {},
-        ssl             = conf.ssl or false,
-        ssl_verify      = conf.ssl_verify or true,
-        sni_host        = conf.sni_host or nil,
-    })
-
-    local agent_config, err = consul:get('/agent/self')
-
-    if not agent_config then
-        print("Consul Connect         ...FAIL (".. err ..")")
-        os.exit(1)
-    else
-        print("Consul Connect         ...OK")
-    end
-
-    if agent_config.status ~= 200 then
-        print("Consul Config          ...FAIL(" .. agent_config.status ..
-                ": " .. string.gsub(agent_config.body, "\n", "") ..")")
+local function validate_store()
+    local res, _ = get_config()
+    
+    -- 验证 store 配置
+    if not res.store then
+        print("Config Store           ...FAIL (store configuration not found)")
         os.exit(1)
     end
-
-    local consul_version_num = tonumber(string.match(agent_config.body.Config.Version, "^%d+%.%d+"))
-    if consul_version_num < 1.13 then
-        print("Consul Version         ...FAIL (consul version be greater than 1.13)")
+    
+    local store_config = res.store
+    local mode = store_config.mode
+    
+    if not mode then
+        print("Config Store Mode      ...FAIL (store.mode not specified)")
         os.exit(1)
-    else
-        print("Consul Version         ...OK")
     end
-
+    
+    if mode ~= "standalone" and mode ~= "hybrid" then
+        print("Config Store Mode      ...FAIL (invalid mode: " .. mode .. ", expected: standalone or hybrid)")
+        os.exit(1)
+    end
+    
+    print("Config Store Mode      ...OK (" .. mode .. ")")
+    
+    -- Standalone 模式验证
+    if mode == "standalone" then
+        local standalone_config = store_config.standalone
+        if not standalone_config then
+            print("Config Standalone      ...FAIL (standalone configuration not found)")
+            os.exit(1)
+        end
+        
+        local config_file = standalone_config.config_file
+        if not config_file then
+            print("Config File            ...FAIL (standalone.config_file not specified)")
+            os.exit(1)
+        end
+        
+        -- 检查配置文件是否存在
+        local config_file_path = common.apioak_home .. "/" .. config_file
+        local f, err = io_open(config_file_path, "r")
+        if not f then
+            print("Config File            ...FAIL (file not found: " .. config_file_path .. ")")
+            os.exit(1)
+        end
+        f:close()
+        
+        print("Config File            ...OK (" .. config_file .. ")")
+        
+        -- 验证声明式配置文件格式
+        local yaml = require("tinyyaml")
+        local cf, _ = io_open(config_file_path, "r")
+        local content = cf:read("*a")
+        cf:close()
+        
+        local data_config = yaml.parse(content)
+        if not data_config then
+            print("Config File Parse      ...FAIL (invalid YAML format)")
+            os.exit(1)
+        end
+        
+        -- 检查必要的字段
+        local has_routes = data_config.routes and #data_config.routes > 0
+        if not has_routes then
+            print("Config Routes          ...WARN (no routes defined)")
+        else
+            print("Config Routes          ...OK (" .. #data_config.routes .. " routes)")
+        end
+    end
+    
+    -- Hybrid 模式验证 (未来实现)
+    if mode == "hybrid" then
+        print("Config Hybrid          ...INFO (hybrid mode will be validated at runtime)")
+    end
+    
     config = res
 end
 
 local function validate_plugin()
 
     local plugins = config.plugins
+
+    if not plugins or #plugins == 0 then
+        print("Plugin Check           ...WARN (no plugins configured)")
+        return
+    end
 
     local err_plugins = {}
 
@@ -102,7 +136,7 @@ local function validate_plugin()
         print("Plugin Check           ...FAIL (Plugin not found: " .. table.concat(err_plugins, ', ') .. ")")
         os.exit(1)
     else
-        print("Plugin Check           ...OK")
+        print("Plugin Check           ...OK (" .. #plugins .. " plugins)")
     end
 end
 
@@ -124,7 +158,7 @@ local function execute()
         print("OpenResty Version      ...OK")
     end
 
-    validate_consul()
+    validate_store()
 
     validate_plugin()
 end

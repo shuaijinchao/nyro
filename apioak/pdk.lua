@@ -12,5 +12,5 @@ return {
     plugin   = require("apioak.pdk.plugin"),
     pool     = require("apioak.pdk.tablepool"),
     const    = require("apioak.pdk.const"),
-    consul   = require("apioak.pdk.consul")
+    consul   = require("apioak.pdk.consul"),  -- Stub for backward compatibility
 }

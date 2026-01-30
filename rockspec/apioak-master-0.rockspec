@@ -19,7 +19,6 @@ dependencies = {
     "lua-resty-worker-events == 2.0.1-1",
     "lua-resty-balancer == 0.02rc5",
     "lua-resty-jwt == 0.2.0",
-    "lua-resty-oakrouting == 0.2.0-1",
     "lua-resty-http == 0.15-0",
     "lua-resty-lrucache == 0.09-2",
     "jsonschema == 0.9.8-0",
@@ -28,7 +27,6 @@ dependencies = {
     "lua-tinyyaml == 0.1",
     "multipart == 0.5.5-1",
     "penlight == 1.5.4-1",
-    "lua-resty-consul == 0.3-2",
     "lua-resty-jit-uuid == 0.0.7-2",
     "lua-resty-dns == 0.21-1"
 }
@@ -146,5 +144,14 @@ build = {
         ["apioak.sys.meta"] = "apioak/sys/meta.lua",
         ["apioak.sys.plugin"] = "apioak/sys/plugin.lua",
         ["apioak.sys.router"] = "apioak/sys/router.lua",
+
+        -- New Router Engine (FFI)
+        ["apioak.sys.router.ffi"] = "apioak/sys/router/ffi.lua",
+        ["apioak.sys.router.matcher"] = "apioak/sys/router/matcher.lua",
+        ["apioak.sys.router.init"] = "apioak/sys/router/init.lua",
+
+        -- Store Abstraction Layer
+        ["apioak.store"] = "apioak/store/init.lua",
+        ["apioak.store.adapter.yaml"] = "apioak/store/adapter/yaml.lua",
     },
 }

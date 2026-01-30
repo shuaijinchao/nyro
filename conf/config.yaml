@@ -1,0 +1,163 @@
+#
+# APIOAK 声明式配置文件 (DB Less 模式)
+#
+# 此文件包含所有路由、服务、上游、插件配置
+# 支持热加载：发送 HUP 信号或调用 Admin API 重新加载
+#
+
+# ============================================================
+# 服务定义
+# ============================================================
+services:
+  - id: svc_demo
+    name: demo-service
+    description: 示例服务
+    hosts:
+      - api.example.com
+      - "*.example.com"
+    protocols:
+      - http
+      - https
+    enabled: true
+    plugins:
+      - ref: plg_rate_limit
+
+# ============================================================
+# 路由定义
+# ============================================================
+routes:
+  # 精确匹配示例
+  - id: rt_users_list
+    name: users-list
+    description: 获取用户列表
+    service_id: svc_demo
+    paths:
+      - /api/v1/users
+    methods:
+      - GET
+      - POST
+    upstream_id: ups_backend
+    enabled: true
+
+  # 参数匹配示例
+  - id: rt_user_detail
+    name: user-detail
+    description: 获取用户详情
+    service_id: svc_demo
+    paths:
+      - /api/v1/users/{id}
+    methods:
+      - GET
+      - PUT
+      - DELETE
+    upstream_id: ups_backend
+    enabled: true
+
+  # 多参数匹配示例
+  - id: rt_user_posts
+    name: user-posts
+    description: 用户文章
+    service_id: svc_demo
+    paths:
+      - /api/v1/users/{user_id}/posts/{post_id}
+    methods:
+      - GET
+      - PUT
+    upstream_id: ups_backend
+    plugins:
+      - ref: plg_jwt_auth
+    enabled: true
+
+  # 前缀匹配示例
+  - id: rt_static
+    name: static-files
+    description: 静态文件服务
+    paths:
+      - /static/*
+    methods:
+      - GET
+    upstream_id: ups_static
+    enabled: true
+
+# ============================================================
+# 上游定义
+# ============================================================
+upstreams:
+  - id: ups_backend
+    name: backend-upstream
+    description: 后端服务集群
+    algorithm: roundrobin    # roundrobin | chash | random
+    nodes:
+      - host: 127.0.0.1
+        port: 8080
+        weight: 10
+      - host: 127.0.0.1
+        port: 8081
+        weight: 5
+    timeout:
+      connect: 5000
+      send: 60000
+      read: 60000
+    health_check:
+      enabled: true
+      type: http
+      http_path: /health
+      interval: 5
+      timeout: 3
+      healthy_threshold: 2
+      unhealthy_threshold: 3
+
+  - id: ups_static
+    name: static-upstream
+    description: 静态文件服务器
+    algorithm: roundrobin
+    nodes:
+      - host: 127.0.0.1
+        port: 9000
+        weight: 1
+
+# ============================================================
+# 插件定义
+# ============================================================
+plugins:
+  - id: plg_rate_limit
+    name: rate-limit
+    key: limit-req
+    enabled: true
+    config:
+      rate: 100
+      burst: 50
+      key: remote_addr
+
+  - id: plg_jwt_auth
+    name: jwt-auth
+    key: jwt-auth
+    enabled: true
+    config:
+      secret: your-secret-key-here
+      algorithm: HS256
+      exp_leeway: 0
+
+  - id: plg_cors
+    name: cors
+    key: cors
+    enabled: true
+    config:
+      allow_origins: "*"
+      allow_methods: "GET,POST,PUT,DELETE,OPTIONS"
+      allow_headers: "Content-Type,Authorization"
+      expose_headers: "X-Request-Id"
+      max_age: 3600
+
+# ============================================================
+# SSL 证书定义
+# ============================================================
+certificates:
+  - id: cert_example
+    name: example-cert
+    sni:
+      - "*.example.com"
+      - example.com
+    cert_path: conf/cert/apioak.crt
+    key_path: conf/cert/apioak.key
+    enabled: true

@@ -1,36 +1,41 @@
-local config = require("apioak.sys.config")
-local resty_consul = require('resty.consul')
+--
+-- Consul Stub Module
+--
+-- This is a stub module for backward compatibility.
+-- Consul support has been removed in favor of the Store abstraction layer.
+-- This module exists only to prevent loading errors from legacy code.
+--
 
-local _M = {
-    _VERSION = '0.6.0',
-    instance = {},
+local _M = {}
+
+-- Stub instance that returns errors for all operations
+local stub_instance = {
+    get_key = function(self, key)
+        return nil, "Consul support has been removed. Use Store abstraction instead."
+    end,
+    put_key = function(self, key, value, args)
+        return nil, "Consul support has been removed. Use Store abstraction instead."
+    end,
+    list_keys = function(self, prefix)
+        return nil, "Consul support has been removed. Use Store abstraction instead."
+    end,
+    delete_key = function(self, key)
+        return nil, "Consul support has been removed. Use Store abstraction instead."
+    end,
+    txn = function(self, payload)
+        return nil, "Consul support has been removed. Use Store abstraction instead."
+    end,
+    get = function(self, path)
+        return nil, "Consul support has been removed. Use Store abstraction instead."
+    end,
 }
 
-local DEFAULT_HOST            = "127.0.0.1"
-local DEFAULT_PORT            = 8500
-local DEFAULT_COONECT_TIMEOUT = 60*1000 -- 60s default timeout
-local DEFAULT_READ_TIMEOUT    = 60*1000 -- 60s default timeout
+-- Provide stub instance
+_M.instance = stub_instance
 
+-- Initialization does nothing
 function _M.init()
-
-    local conf, err = config.query("consul")
-
-    if err or conf == nil then
-        return
-    end
-
-    local consul = resty_consul:new({
-        host            = conf.host or DEFAULT_HOST,
-        port            = conf.port or DEFAULT_PORT,
-        connect_timeout = conf.connect_timeout or DEFAULT_COONECT_TIMEOUT, -- 60s
-        read_timeout    = conf.read_timeout or DEFAULT_READ_TIMEOUT, -- 60s
-        default_args    = {},
-        ssl             = conf.ssl or false,
-        ssl_verify      = conf.ssl_verify or true,
-        sni_host        = conf.sni_host or nil,
-    })
-
-    _M.instance = consul
+    return true
 end
 
 return _M

@@ -1,13 +1,42 @@
-consul:
-  host: 127.0.0.1
-  port: 8500
-  connect_timeout: 600000
-  read_timeout: 600000
-  ssl: false
-  ssl_verify: true
-  sni_host: nil
-  prefix: apioak
+#
+# APIOAK 主配置文件
+#
 
+# ============================================================
+# 存储模式配置
+# ============================================================
+# 模式选择:
+#   - standalone: DB Less 模式，从 YAML 文件加载配置
+#   - hybrid: CP/DP 分离模式，从 Control Plane 同步配置 (未来支持)
+store:
+  mode: standalone
+  
+  # Standalone 模式配置 (DB Less)
+  standalone:
+    # 声明式配置文件路径 (相对于 nginx prefix)
+    config_file: conf/config.yaml
+    
+    # 热加载方式: signal | admin_api | watch
+    # - signal: 通过 HUP 信号触发
+    # - admin_api: 通过 Admin API 触发
+    # - watch: 文件变更自动加载 (需要 inotify 支持)
+    reload_method: signal
+
+  # Hybrid 模式配置 (未来支持)
+  # hybrid:
+  #   role: dp  # cp | dp
+  #   control_plane:
+  #     endpoints:
+  #       - http://cp-1.apioak.local:9080
+  #       - http://cp-2.apioak.local:9080
+  #     sync_interval: 5
+  #   mongodb:
+  #     uri: mongodb://localhost:27017
+  #     database: apioak
+
+# ============================================================
+# 插件列表
+# ============================================================
 plugins:
   - cors
   - mock
@@ -16,4 +45,19 @@ plugins:
   - limit-req
   - limit-conn
   - limit-count
+  # - ai-proxy  # AI Proxy 插件 (未来支持)
 
+# ============================================================
+# 日志配置
+# ============================================================
+logging:
+  level: info       # debug | info | warn | error
+
+# ============================================================
+# Admin API 配置
+# ============================================================
+admin:
+  # 是否启用 Admin API (standalone 模式下通常禁用)
+  enabled: false
+  # Admin API 监听地址
+  listen: 127.0.0.1:9080

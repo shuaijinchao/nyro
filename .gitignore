@@ -43,7 +43,9 @@ luac.out
 .vscode
 
 # LuaRocks installation directories
-deps
 lua_modules
 share
 lib
+
+# Logs directory
+logs/
