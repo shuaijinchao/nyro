@@ -3,6 +3,6 @@
 -- APIOAK CLI entry point
 -- This script is installed by LuaRocks and will automatically use the correct paths
 
-require("apioak.cmd.utils.common")
+require("apioak.cli.utils.common")
 
-require("apioak.cmd.init")(arg)
+require("apioak.cli.init")(arg)

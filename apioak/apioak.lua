@@ -1,7 +1,14 @@
 local ngx    = ngx
 local pairs  = pairs
-local pdk    = require("apioak.pdk")
-local sys    = require("apioak.sys")
+local core   = require("apioak.core")
+
+-- 加载资源模块
+local store       = require("apioak.store")
+local route       = require("apioak.route")
+local backend     = require("apioak.backend")
+local certificate = require("apioak.certificate")
+local application = require("apioak.application")
+local plugin      = require("apioak.plugin")
 
 local function run_plugin(phase, oak_ctx)
     if oak_ctx == nil or oak_ctx.config == nil then
@@ -11,15 +18,15 @@ local function run_plugin(phase, oak_ctx)
     local config = oak_ctx.config
 
     if not config then
-        pdk.log.error("run_plugin plugin data not ready!")
-        pdk.response.exit(500, { message = "config not ready" })
+        core.log.error("run_plugin plugin data not ready!")
+        core.response.exit(500, { message = "config not ready" })
     end
 
     local service_router  = config.service_router
     local service_plugins = service_router.plugins
     local router_plugins  = service_router.router.plugins
 
-    local plugin_objects = sys.plugin.plugin_subjects()
+    local plugin_objects = plugin.plugin_subjects()
 
     local router_plugin_keys_map = {}
 
@@ -78,18 +85,18 @@ local function run_plugin(phase, oak_ctx)
 end
 
 local function options_request_handle()
-    if pdk.request.get_method() == "OPTIONS" then
-        pdk.response.exit(200, {
+    if core.request.get_method() == "OPTIONS" then
+        core.response.exit(200, {
             err_message = "Welcome to APIOAK"
         })
     end
 end
 
 local function enable_cors_handle()
-    pdk.response.set_header("Access-Control-Allow-Origin", "*")
-    pdk.response.set_header("Access-Control-Allow-Credentials", "true")
-    pdk.response.set_header("Access-Control-Expose-Headers", "*")
-    pdk.response.set_header("Access-Control-Max-Age", "3600")
+    core.response.set_header("Access-Control-Allow-Origin", "*")
+    core.response.set_header("Access-Control-Allow-Credentials", "true")
+    core.response.set_header("Access-Control-Expose-Headers", "*")
+    core.response.set_header("Access-Control-Max-Age", "3600")
 end
 
 local APIOAK = {}
@@ -107,34 +114,35 @@ function APIOAK.init()
     local process = require("ngx.process")
     local ok, err = process.enable_privileged_agent()
     if not ok then
-        pdk.log.error("failed to enable privileged process, error: ", err)
+        core.log.error("failed to enable privileged process, error: ", err)
     end
 end
 
 function APIOAK.init_worker()
-
-    sys.config.init_worker()
-
-    sys.admin.init_worker()
-
-    sys.dao.init_worker()
-
-    sys.cache.init_worker()
-
-    sys.certificate.init_worker()
-
-    sys.balancer.init_worker()
-
-    sys.plugin.init_worker()
-
-    sys.router.init_worker()
-
-    sys.application.init_worker()
-
+    core.config.init_worker()
+    core.cache.init_worker()
+    
+    -- 初始化 Store
+    local store_config = core.config.query("store") or {}
+    local store_mode = store_config.mode or "standalone"
+    local ok, err = store.init({
+        mode = store_mode,
+        standalone = store_config.standalone or { config_file = "conf/config.yaml" }
+    })
+    if not ok then
+        ngx.log(ngx.ERR, "[apioak] failed to init store: ", err or "unknown error")
+    else
+        ngx.log(ngx.INFO, "[apioak] store initialized, mode: ", store_mode)
+    end
+    
+    certificate.init_worker()
+    backend.init_worker()
+    plugin.init_worker()
+    route.init_worker()
+    application.init_worker()
 end
 
 function APIOAK.ssl_certificate()
-
     local ngx_ssl = require("ngx.ssl")
     local server_name = ngx_ssl.server_name()
 
@@ -143,7 +151,7 @@ function APIOAK.ssl_certificate()
             host = server_name
         }
     }
-    sys.certificate.ssl_match(oak_ctx)
+    certificate.ssl_match(oak_ctx)
 end
 
 function APIOAK.http_access()
@@ -153,30 +161,30 @@ function APIOAK.http_access()
     local ngx_ctx = ngx.ctx
     local oak_ctx = ngx_ctx.oak_ctx
     if not oak_ctx then
-        oak_ctx = pdk.pool.fetch("oak_ctx", 0, 64)
+        oak_ctx = core.pool.fetch("oak_ctx", 0, 64)
         ngx_ctx.oak_ctx = oak_ctx
     end
 
-    sys.router.parameter(oak_ctx)
+    route.parameter(oak_ctx)
 
-    local match_succeed = sys.router.router_match(oak_ctx)
+    local match_succeed = route.router_match(oak_ctx)
 
     if not match_succeed then
-        pdk.response.exit(404, { err_message = "\"URI\" Undefined" })
+        core.response.exit(404, { err_message = "\"URI\" Undefined" })
     end
 
-    sys.balancer.check_backend(oak_ctx)
+    backend.check_backend(oak_ctx)
 
     local matched  = oak_ctx.matched
 
     local upstream_uri = matched.uri
 
     for path_key, path_val in pairs(matched.path) do
-        upstream_uri = pdk.string.replace(upstream_uri, "{" .. path_key .. "}", path_val)
+        upstream_uri = core.string.replace(upstream_uri, "{" .. path_key .. "}", path_val)
     end
 
     for header_key, header_val in pairs(matched.header) do
-        pdk.request.add_header(header_key, header_val)
+        core.request.add_header(header_key, header_val)
     end
 
     local query_args = {}
@@ -185,14 +193,14 @@ function APIOAK.http_access()
         if query_val == true then
             query_val = ""
         end
-        pdk.table.insert(query_args, query_key .. "=" .. query_val)
+        core.table.insert(query_args, query_key .. "=" .. query_val)
     end
 
     if #query_args > 0 then
-        upstream_uri = upstream_uri .. "?" .. pdk.table.concat(query_args, "&")
+        upstream_uri = upstream_uri .. "?" .. core.table.concat(query_args, "&")
     end
 
-    pdk.request.set_method(matched.method)
+    core.request.set_method(matched.method)
 
     ngx.var.upstream_uri = upstream_uri
 
@@ -203,7 +211,7 @@ end
 
 function APIOAK.http_balancer()
     local oak_ctx = ngx.ctx.oak_ctx
-    sys.balancer.gogogo(oak_ctx)
+    backend.gogogo(oak_ctx)
 end
 
 function APIOAK.http_header_filter()
@@ -220,21 +228,15 @@ function APIOAK.http_log()
     local oak_ctx = ngx.ctx.oak_ctx
     run_plugin("http_log", oak_ctx)
     if oak_ctx then
-        pdk.pool.release("oak_ctx", oak_ctx)
+        core.pool.release("oak_ctx", oak_ctx)
     end
 end
 
 function APIOAK.http_admin()
-
+    -- Admin API disabled in DB-less mode
     options_request_handle()
-
     enable_cors_handle()
-
-    local admin_routers = sys.admin.routers()
-    local ok = admin_routers:dispatch(ngx.var.uri, ngx.req.get_method())
-    if not ok then
-        ngx.exit(404)
-    end
+    core.response.exit(503, { err_message = "Admin API disabled in DB-less mode" })
 end
 
 return APIOAK

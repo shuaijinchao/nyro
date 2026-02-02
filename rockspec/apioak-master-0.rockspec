@@ -34,124 +34,90 @@ dependencies = {
 build = {
     type = "builtin",
     modules = {
-        -- Core modules
+        -- Main entry
         ["apioak"] = "apioak/apioak.lua",
-        ["apioak.admin"] = "apioak/admin.lua",
-        ["apioak.dao"] = "apioak/dao.lua",
-        ["apioak.pdk"] = "apioak/pdk.lua",
-        ["apioak.schema"] = "apioak/schema.lua",
-        ["apioak.sys"] = "apioak/sys.lua",
 
-        -- Admin modules
-        ["apioak.admin.certificate"] = "apioak/admin/certificate.lua",
-        ["apioak.admin.controller"] = "apioak/admin/controller.lua",
-        ["apioak.admin.plugin"] = "apioak/admin/plugin.lua",
-        ["apioak.admin.router"] = "apioak/admin/router.lua",
-        ["apioak.admin.service"] = "apioak/admin/service.lua",
-        ["apioak.admin.upstream"] = "apioak/admin/upstream.lua",
-        ["apioak.admin.upstream_node"] = "apioak/admin/upstream_node.lua",
+        -- Core modules
+        ["apioak.core"] = "apioak/core/init.lua",
+        ["apioak.core.const"] = "apioak/core/const.lua",
+        ["apioak.core.ctx"] = "apioak/core/ctx.lua",
+        ["apioak.core.json"] = "apioak/core/json.lua",
+        ["apioak.core.log"] = "apioak/core/log.lua",
+        ["apioak.core.request"] = "apioak/core/request.lua",
+        ["apioak.core.response"] = "apioak/core/response.lua",
+        ["apioak.core.schema"] = "apioak/core/schema.lua",
+        ["apioak.core.shared"] = "apioak/core/shared.lua",
+        ["apioak.core.config"] = "apioak/core/config.lua",
+        ["apioak.core.cache"] = "apioak/core/cache.lua",
+        ["apioak.core.meta"] = "apioak/core/meta.lua",
+        ["apioak.core.utils.string"] = "apioak/core/utils/string.lua",
+        ["apioak.core.utils.table"] = "apioak/core/utils/table.lua",
+        ["apioak.core.utils.tablepool"] = "apioak/core/utils/tablepool.lua",
+        ["apioak.core.utils.time"] = "apioak/core/utils/time.lua",
 
-        -- Admin DAO modules
-        ["apioak.admin.dao.certificate"] = "apioak/admin/dao/certificate.lua",
-        ["apioak.admin.dao.common"] = "apioak/admin/dao/common.lua",
-        ["apioak.admin.dao.plugin"] = "apioak/admin/dao/plugin.lua",
-        ["apioak.admin.dao.router"] = "apioak/admin/dao/router.lua",
-        ["apioak.admin.dao.service"] = "apioak/admin/dao/service.lua",
-        ["apioak.admin.dao.upstream"] = "apioak/admin/dao/upstream.lua",
-        ["apioak.admin.dao.upstream_node"] = "apioak/admin/dao/upstream_node.lua",
+        -- Route modules (routes resource)
+        ["apioak.route"] = "apioak/route/init.lua",
+        ["apioak.route.matcher"] = "apioak/route/matcher.lua",
+        ["apioak.route.ffi"] = "apioak/route/ffi.lua",
 
-        -- Admin Schema modules
-        ["apioak.admin.schema.certificate"] = "apioak/admin/schema/certificate.lua",
-        ["apioak.admin.schema.common"] = "apioak/admin/schema/common.lua",
-        ["apioak.admin.schema.plugin"] = "apioak/admin/schema/plugin.lua",
-        ["apioak.admin.schema.router"] = "apioak/admin/schema/router.lua",
-        ["apioak.admin.schema.service"] = "apioak/admin/schema/service.lua",
-        ["apioak.admin.schema.upstream"] = "apioak/admin/schema/upstream.lua",
-        ["apioak.admin.schema.upstream_node"] = "apioak/admin/schema/upstream_node.lua",
+        -- Backend modules (backends resource)
+        ["apioak.backend"] = "apioak/backend/init.lua",
 
-        -- Command modules
-        ["apioak.cmd"] = "apioak/cmd/init.lua",
-        ["apioak.cmd.env"] = "apioak/cmd/env.lua",
-        ["apioak.cmd.help"] = "apioak/cmd/help.lua",
-        ["apioak.cmd.init"] = "apioak/cmd/init.lua",
-        ["apioak.cmd.quit"] = "apioak/cmd/quit.lua",
-        ["apioak.cmd.reload"] = "apioak/cmd/reload.lua",
-        ["apioak.cmd.restart"] = "apioak/cmd/restart.lua",
-        ["apioak.cmd.start"] = "apioak/cmd/start.lua",
-        ["apioak.cmd.stop"] = "apioak/cmd/stop.lua",
-        ["apioak.cmd.test"] = "apioak/cmd/test.lua",
-        ["apioak.cmd.version"] = "apioak/cmd/version.lua",
+        -- Service modules (services resource)
+        ["apioak.service"] = "apioak/service/init.lua",
 
-        -- Command Utils modules
-        ["apioak.cmd.utils.common"] = "apioak/cmd/utils/common.lua",
-        ["apioak.cmd.utils.kill"] = "apioak/cmd/utils/kill.lua",
-        ["apioak.cmd.utils.nginx_signals"] = "apioak/cmd/utils/nginx_signals.lua",
+        -- Application modules (applications resource)
+        ["apioak.application"] = "apioak/application/init.lua",
 
-        -- PDK modules
-        ["apioak.pdk.const"] = "apioak/pdk/const.lua",
-        ["apioak.pdk.consul"] = "apioak/pdk/consul.lua",
-        ["apioak.pdk.ctx"] = "apioak/pdk/ctx.lua",
-        ["apioak.pdk.json"] = "apioak/pdk/json.lua",
-        ["apioak.pdk.log"] = "apioak/pdk/log.lua",
-        ["apioak.pdk.plugin"] = "apioak/pdk/plugin.lua",
-        ["apioak.pdk.request"] = "apioak/pdk/request.lua",
-        ["apioak.pdk.response"] = "apioak/pdk/response.lua",
-        ["apioak.pdk.schema"] = "apioak/pdk/schema.lua",
-        ["apioak.pdk.shared"] = "apioak/pdk/shared.lua",
-        ["apioak.pdk.string"] = "apioak/pdk/string.lua",
-        ["apioak.pdk.table"] = "apioak/pdk/table.lua",
-        ["apioak.pdk.tablepool"] = "apioak/pdk/tablepool.lua",
-        ["apioak.pdk.time"] = "apioak/pdk/time.lua",
+        -- Certificate modules (certificates resource)
+        ["apioak.certificate"] = "apioak/certificate/init.lua",
 
-        -- Plugin modules
-        ["apioak.plugin.plugin_common"] = "apioak/plugin/plugin_common.lua",
+        -- Plugin modules (plugins resource)
+        ["apioak.plugin"] = "apioak/plugin/init.lua",
+        ["apioak.plugin.common"] = "apioak/plugin/common.lua",
+        ["apioak.plugin.cors.handler"] = "apioak/plugin/cors/handler.lua",
+        ["apioak.plugin.cors.schema"] = "apioak/plugin/cors/schema.lua",
+        ["apioak.plugin.jwt-auth.handler"] = "apioak/plugin/jwt-auth/handler.lua",
+        ["apioak.plugin.jwt-auth.schema"] = "apioak/plugin/jwt-auth/schema.lua",
+        ["apioak.plugin.key-auth.handler"] = "apioak/plugin/key-auth/handler.lua",
+        ["apioak.plugin.key-auth.schema"] = "apioak/plugin/key-auth/schema.lua",
+        ["apioak.plugin.limit-conn.handler"] = "apioak/plugin/limit-conn/handler.lua",
+        ["apioak.plugin.limit-conn.schema"] = "apioak/plugin/limit-conn/schema.lua",
+        ["apioak.plugin.limit-count.handler"] = "apioak/plugin/limit-count/handler.lua",
+        ["apioak.plugin.limit-count.schema"] = "apioak/plugin/limit-count/schema.lua",
+        ["apioak.plugin.limit-req.handler"] = "apioak/plugin/limit-req/handler.lua",
+        ["apioak.plugin.limit-req.schema"] = "apioak/plugin/limit-req/schema.lua",
+        ["apioak.plugin.mock.handler"] = "apioak/plugin/mock/handler.lua",
+        ["apioak.plugin.mock.schema"] = "apioak/plugin/mock/schema.lua",
 
-        -- CORS Plugin
-        ["apioak.plugin.cors.cors"] = "apioak/plugin/cors/cors.lua",
-        ["apioak.plugin.cors.schema-cors"] = "apioak/plugin/cors/schema-cors.lua",
+        -- Schema modules
+        ["apioak.schema"] = "apioak/schema/init.lua",
+        ["apioak.schema.common"] = "apioak/schema/common.lua",
+        ["apioak.schema.backend"] = "apioak/schema/backend.lua",
+        ["apioak.schema.service"] = "apioak/schema/service.lua",
+        ["apioak.schema.route"] = "apioak/schema/route.lua",
+        ["apioak.schema.plugin"] = "apioak/schema/plugin.lua",
+        ["apioak.schema.certificate"] = "apioak/schema/certificate.lua",
+        ["apioak.schema.upstream_node"] = "apioak/schema/upstream_node.lua",
 
-        -- JWT Auth Plugin
-        ["apioak.plugin.jwt-auth.jwt-auth"] = "apioak/plugin/jwt-auth/jwt-auth.lua",
-        ["apioak.plugin.jwt-auth.schema-jwt-auth"] = "apioak/plugin/jwt-auth/schema-jwt-auth.lua",
-
-        -- Key Auth Plugin
-        ["apioak.plugin.key-auth.key-auth"] = "apioak/plugin/key-auth/key-auth.lua",
-        ["apioak.plugin.key-auth.schema-key-auth"] = "apioak/plugin/key-auth/schema-key-auth.lua",
-
-        -- Limit Connection Plugin
-        ["apioak.plugin.limit-conn.limit-conn"] = "apioak/plugin/limit-conn/limit-conn.lua",
-        ["apioak.plugin.limit-conn.schema-limit-conn"] = "apioak/plugin/limit-conn/schema-limit-conn.lua",
-
-        -- Limit Count Plugin
-        ["apioak.plugin.limit-count.limit-count"] = "apioak/plugin/limit-count/limit-count.lua",
-        ["apioak.plugin.limit-count.schema-limit-count"] = "apioak/plugin/limit-count/schema-limit-count.lua",
-
-        -- Limit Request Plugin
-        ["apioak.plugin.limit-req.limit-req"] = "apioak/plugin/limit-req/limit-req.lua",
-        ["apioak.plugin.limit-req.schema-limit-req"] = "apioak/plugin/limit-req/schema-limit-req.lua",
-
-        -- Mock Plugin
-        ["apioak.plugin.mock.mock"] = "apioak/plugin/mock/mock.lua",
-        ["apioak.plugin.mock.schema-mock"] = "apioak/plugin/mock/schema-mock.lua",
-
-        -- System modules
-        ["apioak.sys.admin"] = "apioak/sys/admin.lua",
-        ["apioak.sys.balancer"] = "apioak/sys/balancer.lua",
-        ["apioak.sys.cache"] = "apioak/sys/cache.lua",
-        ["apioak.sys.certificate"] = "apioak/sys/certificate.lua",
-        ["apioak.sys.config"] = "apioak/sys/config.lua",
-        ["apioak.sys.dao"] = "apioak/sys/dao.lua",
-        ["apioak.sys.meta"] = "apioak/sys/meta.lua",
-        ["apioak.sys.plugin"] = "apioak/sys/plugin.lua",
-        ["apioak.sys.router"] = "apioak/sys/router.lua",
-
-        -- New Router Engine (FFI)
-        ["apioak.sys.router.ffi"] = "apioak/sys/router/ffi.lua",
-        ["apioak.sys.router.matcher"] = "apioak/sys/router/matcher.lua",
-        ["apioak.sys.router.init"] = "apioak/sys/router/init.lua",
-
-        -- Store Abstraction Layer
+        -- Store modules
         ["apioak.store"] = "apioak/store/init.lua",
         ["apioak.store.adapter.yaml"] = "apioak/store/adapter/yaml.lua",
+
+        -- CLI modules
+        ["apioak.cli"] = "apioak/cli/init.lua",
+        ["apioak.cli.env"] = "apioak/cli/env.lua",
+        ["apioak.cli.help"] = "apioak/cli/help.lua",
+        ["apioak.cli.init"] = "apioak/cli/init.lua",
+        ["apioak.cli.quit"] = "apioak/cli/quit.lua",
+        ["apioak.cli.reload"] = "apioak/cli/reload.lua",
+        ["apioak.cli.restart"] = "apioak/cli/restart.lua",
+        ["apioak.cli.start"] = "apioak/cli/start.lua",
+        ["apioak.cli.stop"] = "apioak/cli/stop.lua",
+        ["apioak.cli.test"] = "apioak/cli/test.lua",
+        ["apioak.cli.version"] = "apioak/cli/version.lua",
+        ["apioak.cli.utils.common"] = "apioak/cli/utils/common.lua",
+        ["apioak.cli.utils.kill"] = "apioak/cli/utils/kill.lua",
+        ["apioak.cli.utils.nginx_signals"] = "apioak/cli/utils/nginx_signals.lua",
     },
 }
