@@ -10,10 +10,9 @@ local ngx = ngx
 local type = type
 local pairs = pairs
 local ipairs = ipairs
-local setmetatable = setmetatable
 
 local _M = {
-    _VERSION = "0.1.0"
+    _VERSION = "2.0.0"
 }
 
 -- 内部状态
@@ -58,12 +57,13 @@ local function validate_config(config)
         return false, "config must be a table"
     end
     
-    -- 基础验证，后续可以增加更严格的 Schema 验证
     local valid_sections = {
+        version = true,
+        plugins = true,
+        backends = true,
         services = true,
         routes = true,
-        upstreams = true,
-        plugins = true,
+        applications = true,
         certificates = true,
     }
     
@@ -76,21 +76,17 @@ local function validate_config(config)
     return true
 end
 
--- 构建索引 (id -> object)
-local function build_index(list, key)
+-- 构建索引 (使用 name 作为 key)
+local function build_index_by_name(list)
     if not list then
         return {}
     end
-    
-    key = key or "id"
     local index = {}
-    
     for _, item in ipairs(list) do
-        if item[key] then
-            index[item[key]] = item
+        if item.name then
+            index[item.name] = item
         end
     end
-    
     return index
 end
 
@@ -120,11 +116,12 @@ local function load_config()
     
     -- 构建索引
     data._index = {
-        services = build_index(data.services),
-        routes = build_index(data.routes),
-        upstreams = build_index(data.upstreams),
-        plugins = build_index(data.plugins),
-        certificates = build_index(data.certificates),
+        plugins = build_index_by_name(data.plugins),
+        backends = build_index_by_name(data.backends),
+        services = build_index_by_name(data.services),
+        routes = build_index_by_name(data.routes),
+        applications = build_index_by_name(data.applications),
+        certificates = build_index_by_name(data.certificates),
     }
     
     -- 更新版本号
@@ -132,9 +129,9 @@ local function load_config()
     config_data = data
     
     ngx.log(ngx.INFO, "[store.yaml] config loaded, version: ", config_version, 
+            ", backends: ", #(data.backends or {}),
             ", services: ", #(data.services or {}),
-            ", routes: ", #(data.routes or {}),
-            ", upstreams: ", #(data.upstreams or {}))
+            ", routes: ", #(data.routes or {}))
     
     return true
 end
@@ -154,23 +151,18 @@ end
 -- ============================================================
 
 -- 初始化适配器
--- @param config table
---   - config_file: string 配置文件路径
 function _M.init(config)
     config = config or {}
     
-    -- 确定配置文件路径
     if config.config_file then
         config_file_path = config.config_file
     else
-        -- 使用默认路径 (相对于 nginx prefix)
         local prefix = ngx.config.prefix()
         config_file_path = prefix .. DEFAULT_CONFIG_FILE
     end
     
     ngx.log(ngx.INFO, "[store.yaml] initializing with config file: ", config_file_path)
     
-    -- 加载配置
     local ok, err = load_config()
     if not ok then
         return false, err
@@ -188,7 +180,6 @@ function _M.reload()
         return false, err
     end
     
-    -- 通知变更
     if config_version > old_version then
         notify_watchers("reload", {
             old_version = old_version,
@@ -214,6 +205,26 @@ function _M.get_version()
     return config_version
 end
 
+-- ============================================================
+-- 资源访问接口
+-- ============================================================
+
+-- 获取全局插件
+function _M.get_plugins()
+    if not config_data then
+        return nil, "config not loaded"
+    end
+    return config_data.plugins or {}, nil
+end
+
+-- 获取所有后端
+function _M.get_backends()
+    if not config_data then
+        return nil, "config not loaded"
+    end
+    return config_data.backends or {}, nil
+end
+
 -- 获取所有服务
 function _M.get_services()
     if not config_data then
@@ -230,20 +241,12 @@ function _M.get_routes()
     return config_data.routes or {}, nil
 end
 
--- 获取所有上游
-function _M.get_upstreams()
+-- 获取所有应用
+function _M.get_applications()
     if not config_data then
         return nil, "config not loaded"
     end
-    return config_data.upstreams or {}, nil
-end
-
--- 获取所有插件配置
-function _M.get_plugins()
-    if not config_data then
-        return nil, "config not loaded"
-    end
-    return config_data.plugins or {}, nil
+    return config_data.applications or {}, nil
 end
 
 -- 获取所有证书
@@ -254,36 +257,50 @@ function _M.get_certificates()
     return config_data.certificates or {}, nil
 end
 
--- 通过 ID 获取服务
-function _M.get_service_by_id(id)
+-- ============================================================
+-- 按 name 查询接口
+-- ============================================================
+
+function _M.get_plugin_by_name(name)
     if not config_data or not config_data._index then
         return nil, "config not loaded"
     end
-    return config_data._index.services[id]
+    return config_data._index.plugins[name]
 end
 
--- 通过 ID 获取路由
-function _M.get_route_by_id(id)
+function _M.get_backend_by_name(name)
     if not config_data or not config_data._index then
         return nil, "config not loaded"
     end
-    return config_data._index.routes[id]
+    return config_data._index.backends[name]
 end
 
--- 通过 ID 获取上游
-function _M.get_upstream_by_id(id)
+function _M.get_service_by_name(name)
     if not config_data or not config_data._index then
         return nil, "config not loaded"
     end
-    return config_data._index.upstreams[id]
+    return config_data._index.services[name]
 end
 
--- 通过 ID 获取插件配置
-function _M.get_plugin_by_id(id)
+function _M.get_route_by_name(name)
     if not config_data or not config_data._index then
         return nil, "config not loaded"
     end
-    return config_data._index.plugins[id]
+    return config_data._index.routes[name]
+end
+
+function _M.get_application_by_name(name)
+    if not config_data or not config_data._index then
+        return nil, "config not loaded"
+    end
+    return config_data._index.applications[name]
+end
+
+function _M.get_certificate_by_name(name)
+    if not config_data or not config_data._index then
+        return nil, "config not loaded"
+    end
+    return config_data._index.certificates[name]
 end
 
 return _M

@@ -129,6 +129,8 @@ function APIOAK.init_worker()
 
     sys.router.init_worker()
 
+    sys.application.init_worker()
+
 end
 
 function APIOAK.ssl_certificate()
@@ -163,9 +165,7 @@ function APIOAK.http_access()
         pdk.response.exit(404, { err_message = "\"URI\" Undefined" })
     end
 
-    sys.balancer.init_resolver()
-
-    sys.balancer.check_replenish_upstream(oak_ctx)
+    sys.balancer.check_backend(oak_ctx)
 
     local matched  = oak_ctx.matched
 

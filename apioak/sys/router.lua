@@ -1,7 +1,7 @@
 --
 -- APIOAK System Router
 -- 
--- 路由管理模块，使用新的 FFI 路由引擎和 Store 抽象层
+-- 路由管理模块，使用 FFI 路由引擎和 Store 抽象层
 --
 
 local ngx = ngx
@@ -11,32 +11,15 @@ local type = type
 local pdk = require("apioak.pdk")
 local store = require("apioak.store")
 local events = require("resty.worker.events")
-local schema = require("apioak.schema")
-local sys_certificate = require("apioak.sys.certificate")
-local sys_balancer = require("apioak.sys.balancer")
-local sys_plugin = require("apioak.sys.plugin")
 local ngx_process = require("ngx.process")
 local ngx_sleep = ngx.sleep
 local ngx_timer_at = ngx.timer.at
 local ngx_worker_exiting = ngx.worker.exiting
-local ngx_shared = ngx.shared
 
--- 尝试加载新的路由引擎
-local new_router_available = false
-local router_matcher
+-- 加载路由引擎
+local router_matcher = require("apioak.sys.router.matcher")
 
-do
-    local ok, matcher = pcall(require, "apioak.sys.router.matcher")
-    if ok then
-        router_matcher = matcher
-        new_router_available = true
-        ngx.log(ngx.INFO, "[sys.router] new FFI router engine loaded")
-    else
-        ngx.log(ngx.WARN, "[sys.router] FFI router not available: ", matcher)
-    end
-end
-
-local router_instance  -- 新路由引擎实例
+local router_instance
 local current_version = 0
 
 local events_source_router = "events_source_router"
@@ -56,24 +39,24 @@ local function load_routes_from_store()
     end
 
     local services, _ = store.get_services()
-    local upstreams, _ = store.get_upstreams()
+    local backends, _ = store.get_backends()
     local plugins, _ = store.get_plugins()
 
-    -- 构建索引
+    -- 构建索引 (使用 name 作为 key)
     local service_map = {}
     if services then
         for _, svc in ipairs(services) do
-            if svc.id then
-                service_map[svc.id] = svc
+            if svc.name then
+                service_map[svc.name] = svc
             end
         end
     end
 
-    local upstream_map = {}
-    if upstreams then
-        for _, ups in ipairs(upstreams) do
-            if ups.id then
-                upstream_map[ups.id] = ups
+    local backend_map = {}
+    if backends then
+        for _, backend in ipairs(backends) do
+            if backend.name then
+                backend_map[backend.name] = backend
             end
         end
     end
@@ -81,8 +64,8 @@ local function load_routes_from_store()
     local plugin_map = {}
     if plugins then
         for _, plg in ipairs(plugins) do
-            if plg.id then
-                plugin_map[plg.id] = plg
+            if plg.name then
+                plugin_map[plg.name] = plg
             end
         end
     end
@@ -90,17 +73,36 @@ local function load_routes_from_store()
     return {
         routes = routes or {},
         services = service_map,
-        upstreams = upstream_map,
+        backends = backend_map,
         plugins = plugin_map,
     }
 end
 
--- 构建路由表 (使用新路由引擎)
-local function build_router_with_new_engine(data)
-    if not new_router_available then
-        return nil, "new router engine not available"
+-- 解析 URL 获取 host/port/path
+local function parse_url(url)
+    if not url then
+        return nil
     end
+    
+    -- 格式: scheme://host:port/path
+    local scheme, host, port, path = url:match("^(https?)://([^:/]+):?(%d*)(.*)$")
+    if not scheme then
+        return nil
+    end
+    
+    port = tonumber(port) or (scheme == "https" and 443 or 80)
+    path = path ~= "" and path or "/"
+    
+    return {
+        scheme = scheme,
+        host = host,
+        port = port,
+        path = path,
+    }
+end
 
+-- 构建路由表
+local function build_router(data)
     local r, err = router_matcher.new()
     if not r then
         return nil, "failed to create router: " .. tostring(err)
@@ -111,34 +113,49 @@ local function build_router_with_new_engine(data)
 
     local added_count = 0
     for _, route in ipairs(routes) do
-        if route.enabled ~= false then
-            local paths = route.paths or {}
-            local methods = route.methods or {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+        local paths = route.paths or {}
+        local methods = route.methods or {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
 
-            -- 获取关联的服务
-            local service = nil
-            if route.service_id then
-                service = services[route.service_id]
+        -- 获取关联的服务
+        local service = nil
+        if route.service then
+            service = services[route.service]
+        end
+
+        -- 确定后端: backend 或 url 直接代理
+        local backend_name = nil
+        local upstream_url = nil
+        
+        if service then
+            if service.backend then
+                backend_name = service.backend
+            elseif service.url then
+                upstream_url = parse_url(service.url)
             end
+        end
 
-            for _, path in ipairs(paths) do
-                local ok, add_err = r:add({
-                    path = path,
-                    methods = methods,
-                    priority = route.priority or 0,
-                    handler = {
-                        route = route,
-                        service = service,
-                        upstream_id = route.upstream_id,
-                        plugins = route.plugins or {},
-                    },
-                })
+        -- 获取匹配类型
+        local match_type = route.match_type
 
-                if ok then
-                    added_count = added_count + 1
-                else
-                    ngx.log(ngx.WARN, "[sys.router] failed to add route: ", route.id, " path: ", path, " err: ", add_err)
-                end
+        for _, path in ipairs(paths) do
+            local ok, add_err = r:add({
+                path = path,
+                methods = methods,
+                match_type = match_type,
+                priority = route.priority or 0,
+                handler = {
+                    route = route,
+                    service = service,
+                    backend_name = backend_name,
+                    upstream_url = upstream_url,
+                    plugins = route.plugins or {},
+                },
+            })
+
+            if ok then
+                added_count = added_count + 1
+            else
+                ngx.log(ngx.WARN, "[sys.router] failed to add route: ", route.name, " path: ", path, " err: ", add_err)
             end
         end
     end
@@ -170,23 +187,19 @@ local function rebuild_router()
         return false
     end
 
-    if new_router_available then
-        local new_router, build_err = build_router_with_new_engine(data)
-        if new_router then
-            router_instance = new_router
-            current_version = store.get_version()
-            ngx.log(ngx.INFO, "[sys.router] router updated, version: ", current_version)
-            return true
-        else
-            ngx.log(ngx.ERR, "[sys.router] failed to build router: ", build_err)
-            return false
-        end
+    local new_router, build_err = build_router(data)
+    if new_router then
+        router_instance = new_router
+        current_version = store.get_version()
+        ngx.log(ngx.INFO, "[sys.router] router updated, version: ", current_version)
+        return true
+    else
+        ngx.log(ngx.ERR, "[sys.router] failed to build router: ", build_err)
+        return false
     end
-
-    return false
 end
 
--- 主协调进程：检测配置变更并广播重建信号
+-- 协调器：检测配置变更并广播重建信号
 local function coordinator_sync(premature)
     if premature then
         return
@@ -197,12 +210,9 @@ local function coordinator_sync(premature)
     end
 
     local check_interval = 2
-    local max_retries = 10
-    local retry_count = 0
 
-    while not ngx_worker_exiting() and retry_count < max_retries do
+    while not ngx_worker_exiting() do
         repeat
-            -- 等待 Store 初始化
             if not store.is_initialized() then
                 ngx_sleep(1)
                 break
@@ -210,9 +220,7 @@ local function coordinator_sync(premature)
 
             local new_version = store.get_version()
 
-            -- 检测版本变更
             if new_version ~= current_version then
-                -- 广播重建信号给所有 worker
                 local ok, post_err = events.post(
                     events_source_router, 
                     events_type_rebuild_router, 
@@ -228,20 +236,11 @@ local function coordinator_sync(premature)
             end
 
             ngx_sleep(check_interval)
-            retry_count = 0  -- 重置重试计数
-
         until true
-
-        retry_count = retry_count + 1
-    end
-
-    -- 继续调度
-    if not ngx_worker_exiting() then
-        ngx_timer_at(0, coordinator_sync)
     end
 end
 
--- Worker 初始化：构建本地路由表
+-- Worker 初始化路由表
 local function worker_init_router(premature)
     if premature then
         return
@@ -250,7 +249,6 @@ local function worker_init_router(premature)
     local max_wait = 30
     local waited = 0
 
-    -- 等待 Store 初始化
     while not store.is_initialized() and waited < max_wait do
         ngx_sleep(0.5)
         waited = waited + 0.5
@@ -261,27 +259,21 @@ local function worker_init_router(premature)
         return
     end
 
-    -- 构建路由表
     local ok = rebuild_router()
     if ok then
         ngx.log(ngx.INFO, "[sys.router] worker initialized router successfully")
     else
-        ngx.log(ngx.WARN, "[sys.router] worker failed to initialize router, will retry on signal")
+        ngx.log(ngx.WARN, "[sys.router] worker failed to initialize router")
     end
 end
 
--- Worker 事件处理器注册
-local function worker_event_router_handler_register()
+-- Worker 事件处理器
+local function worker_event_handler_register()
     local rebuild_handler = function(data, event, source)
-        if source ~= events_source_router then
+        if source ~= events_source_router or event ~= events_type_rebuild_router then
             return
         end
 
-        if event ~= events_type_rebuild_router then
-            return
-        end
-
-        -- 收到重建信号，重新构建本地路由表
         ngx.log(ngx.INFO, "[sys.router] received rebuild signal, version: ", data and data.version or "unknown")
         rebuild_router()
     end
@@ -290,12 +282,9 @@ local function worker_event_router_handler_register()
 end
 
 function _M.init_worker()
-    worker_event_router_handler_register()
-    
-    -- 每个 worker 独立初始化路由表
+    worker_event_handler_register()
     ngx_timer_at(0, worker_init_router)
     
-    -- 只有 privileged agent 进程运行协调器
     if ngx_process.type() == "privileged agent" then
         ngx_timer_at(0, coordinator_sync)
     end
@@ -322,7 +311,7 @@ end
 
 -- 路由匹配
 function _M.router_match(oak_ctx)
-    if not oak_ctx.matched or not oak_ctx.matched.host or not oak_ctx.matched.uri then
+    if not oak_ctx.matched or not oak_ctx.matched.uri then
         pdk.log.error("[sys.router] oak_ctx data format error")
         return false
     end
@@ -332,7 +321,6 @@ function _M.router_match(oak_ctx)
         return false
     end
 
-    -- 使用新路由引擎匹配
     local handler, params, match_type = router_instance:match(
         oak_ctx.matched.host,
         oak_ctx.matched.uri,
@@ -345,21 +333,35 @@ function _M.router_match(oak_ctx)
 
     -- 设置匹配结果
     oak_ctx.matched.path = params or {}
-    oak_ctx.config = {}
-    oak_ctx.config.route = handler.route
-    oak_ctx.config.service = handler.service
-    oak_ctx.config.upstream_id = handler.upstream_id
-    oak_ctx.config.plugins = handler.plugins
-    oak_ctx.config.match_type = match_type
+    oak_ctx.config = {
+        route = handler.route,
+        service = handler.service,
+        backend_name = handler.backend_name,
+        upstream_url = handler.upstream_url,
+        plugins = handler.plugins,
+        match_type = match_type,
+    }
 
-    -- 兼容旧的 service_router 结构
+    -- 构建 service_router 结构 (用于 balancer)
+    local upstream = nil
+    if handler.backend_name then
+        upstream = { id = handler.backend_name }
+    elseif handler.upstream_url then
+        upstream = {
+            address = handler.upstream_url.host,
+            port = handler.upstream_url.port,
+            scheme = handler.upstream_url.scheme,
+            path = handler.upstream_url.path,
+        }
+    end
+
     oak_ctx.config.service_router = {
-        protocols = handler.service and handler.service.protocols or {"http", "https"},
+        protocols = handler.service and handler.service.protocol and {handler.service.protocol} or {"http"},
         plugins = handler.service and handler.service.plugins or {},
         router = {
             path = oak_ctx.matched.uri,
             plugins = handler.plugins or {},
-            upstream = handler.upstream_id and { id = handler.upstream_id } or nil,
+            upstream = upstream,
             headers = handler.route and handler.route.headers or {},
             methods = handler.route and handler.route.methods or {},
         }

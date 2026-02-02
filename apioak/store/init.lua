@@ -7,12 +7,12 @@
 --
 
 local _M = {
-    _VERSION = "0.1.0"
+    _VERSION = "2.0.0"
 }
 
 -- 存储模式
-_M.MODE_STANDALONE = "standalone"   -- DB Less 模式
-_M.MODE_HYBRID     = "hybrid"       -- CP/DP 分离模式
+_M.MODE_STANDALONE = "standalone"
+_M.MODE_HYBRID     = "hybrid"
 
 -- 当前适配器实例
 local adapter = nil
@@ -30,12 +30,6 @@ local function load_adapter(mode)
 end
 
 -- 初始化存储层
--- @param config table 配置
---   - mode: string 存储模式 (standalone/hybrid)
---   - standalone: table Standalone 模式配置
---     - config_file: string 配置文件路径
---   - hybrid: table Hybrid 模式配置
---     - control_plane_endpoints: table CP 地址列表
 function _M.init(config)
     if not config then
         return false, "config is required"
@@ -70,8 +64,24 @@ function _M.is_initialized()
 end
 
 -- ============================================================
--- 数据访问接口
+-- 资源访问接口
 -- ============================================================
+
+-- 获取全局插件
+function _M.get_plugins()
+    if not adapter then
+        return nil, "store not initialized"
+    end
+    return adapter.get_plugins()
+end
+
+-- 获取所有后端
+function _M.get_backends()
+    if not adapter then
+        return nil, "store not initialized"
+    end
+    return adapter.get_backends()
+end
 
 -- 获取所有服务
 function _M.get_services()
@@ -89,20 +99,12 @@ function _M.get_routes()
     return adapter.get_routes()
 end
 
--- 获取所有上游
-function _M.get_upstreams()
+-- 获取所有应用
+function _M.get_applications()
     if not adapter then
         return nil, "store not initialized"
     end
-    return adapter.get_upstreams()
-end
-
--- 获取所有插件配置
-function _M.get_plugins()
-    if not adapter then
-        return nil, "store not initialized"
-    end
-    return adapter.get_plugins()
+    return adapter.get_applications()
 end
 
 -- 获取所有证书
@@ -139,7 +141,6 @@ function _M.reload()
 end
 
 -- 监听配置变更
--- @param callback function(event_type, data)
 function _M.watch(callback)
     if not adapter then
         return false, "store not initialized"
