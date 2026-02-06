@@ -7,7 +7,7 @@ local store       = require("apioak.store")
 local route       = require("apioak.route")
 local backend     = require("apioak.backend")
 local certificate = require("apioak.certificate")
-local application = require("apioak.application")
+local consumer    = require("apioak.consumer")
 local plugin      = require("apioak.plugin")
 
 local function run_plugin(phase, oak_ctx)
@@ -139,7 +139,7 @@ function APIOAK.init_worker()
     backend.init_worker()
     plugin.init_worker()
     route.init_worker()
-    application.init_worker()
+    consumer.init_worker()
 end
 
 function APIOAK.ssl_certificate()

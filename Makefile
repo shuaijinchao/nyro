@@ -39,14 +39,10 @@ install:
 	luarocks make $(ROCKSPEC) --tree=$(APIOAK_DIR) $(LUAROCKS_FLAGS)
 	@echo "Installing binary and configuration files..."
 	@mkdir -p $(APIOAK_DIR)/bin
-	@mkdir -p $(APIOAK_DIR)/conf/cert
 	@mkdir -p $(APIOAK_DIR)/lib
 	@install -m 755 bin/apioak $(APIOAK_DIR)/bin/apioak
 	@install -m 644 conf/apioak.yaml $(APIOAK_DIR)/conf/apioak.yaml
-	@install -m 644 conf/nginx.conf $(APIOAK_DIR)/conf/nginx.conf
-	@install -m 644 conf/mime.types $(APIOAK_DIR)/conf/mime.types
-	@install -m 644 conf/cert/apioak.crt $(APIOAK_DIR)/conf/cert/apioak.crt
-	@install -m 600 conf/cert/apioak.key $(APIOAK_DIR)/conf/cert/apioak.key
+	@install -m 644 conf/config.yaml $(APIOAK_DIR)/conf/config.yaml
 	@cp $(ROUTER_LIB_DIR)/$(ROUTER_LIB) $(APIOAK_DIR)/lib/
 	@echo ""
 	@echo "✅ Installation complete!"

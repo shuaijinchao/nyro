@@ -49,3 +49,7 @@ lib
 
 # Logs directory
 logs/
+
+# Generated files (auto-generated at startup)
+conf/nginx.conf
+ssl/

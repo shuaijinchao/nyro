@@ -148,7 +148,7 @@
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────┐    ┌─────────────────────┐
-│  plugins (全局)      │    │  applications       │
+│  plugins (全局)      │    │  consumers          │
 │  对所有请求生效       │    │  认证主体 + 凭证     │
 └─────────────────────┘    └─────────────────────┘
 
@@ -269,12 +269,12 @@ routes:
 | 参数匹配 | `/api/v1/users/{id}` | 包含 `{param}` |
 | 正则匹配 | `~^/api/v[0-9]+/.*` | 以 `~` 开头 |
 
-#### 5. applications (应用)
+#### 5. consumers (消费者)
 
-API 调用方/消费者，用于认证和限流。
+API 消费者，用于认证和限流。
 
 ```yaml
-applications:
+consumers:
   - name: mobile-app
     credentials:
       key-auth:
@@ -364,7 +364,7 @@ routes:
     plugins:
       - name: key-auth
 
-applications:
+consumers:
   - name: my-app
     credentials:
       key-auth:
@@ -534,7 +534,7 @@ AI Proxy 是目前 API 网关最火热的场景，本质是七层流量治理在
 │       ├── ⏳ backends 资源支持                                 │
 │       ├── ⏳ services 资源支持                                 │
 │       ├── ⏳ routes 资源支持                                   │
-│       ├── ⏳ applications 资源支持                             │
+│       ├── ⏳ consumers 资源支持                                │
 │       ├── ⏳ certificates 资源支持                             │
 │       └── ⏳ plugins 资源支持                                  │
 ├────────────────────────────────────────────────────────────────┤
@@ -730,9 +730,9 @@ routes:
     priority: 10
 
 # ============================================================
-# 应用定义
+# 消费者定义
 # ============================================================
-applications:
+consumers:
   - name: mobile-app
     credentials:
       key-auth:

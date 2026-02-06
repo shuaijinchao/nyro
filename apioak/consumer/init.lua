@@ -1,7 +1,7 @@
 --
--- APIOAK System Application
+-- APIOAK System Consumer
 --
--- 应用资源管理模块，用于 API 消费者认证
+-- 消费者资源管理模块，用于 API 消费者认证
 --
 
 local ngx = ngx
@@ -15,47 +15,47 @@ local ngx_timer_at = ngx.timer.at
 local ngx_sleep = ngx.sleep
 local ngx_worker_exiting = ngx.worker.exiting
 
--- 应用数据索引
-local applications = {}
--- 凭证索引: { ["key-auth:mobile-app-key"] = application_name }
+-- 消费者数据索引
+local consumers = {}
+-- 凭证索引: { ["key-auth:mobile-app-key"] = consumer_name }
 local credential_index = {}
 local current_version = 0
 
 local _M = {}
 
-_M.events_source_application = "events_source_application"
-_M.events_type_rebuild_application = "events_type_rebuild_application"
+_M.events_source_consumer = "events_source_consumer"
+_M.events_type_rebuild_consumer = "events_type_rebuild_consumer"
 
--- 从 Store 加载应用数据
-local function load_applications_from_store()
+-- 从 Store 加载消费者数据
+local function load_consumers_from_store()
     if not store.is_initialized() then
         return nil, "store not initialized"
     end
 
-    local apps, err = store.get_applications()
+    local items, err = store.get_consumers()
     if err then
         return nil, err
     end
 
-    return apps or {}
+    return items or {}
 end
 
 -- 构建凭证索引
-local function build_credential_index(apps)
+local function build_credential_index(items)
     local index = {}
     
-    for _, app in ipairs(apps) do
-        if app.name and app.credentials then
-            for cred_type, cred_data in pairs(app.credentials) do
+    for _, consumer in ipairs(items) do
+        if consumer.name and consumer.credentials then
+            for cred_type, cred_data in pairs(consumer.credentials) do
                 -- 支持不同类型的凭证
                 if cred_type == "key-auth" and cred_data.key then
-                    index["key-auth:" .. cred_data.key] = app.name
+                    index["key-auth:" .. cred_data.key] = consumer.name
                 elseif cred_type == "basic-auth" and cred_data.username then
-                    index["basic-auth:" .. cred_data.username] = app.name
+                    index["basic-auth:" .. cred_data.username] = consumer.name
                 elseif cred_type == "jwt-auth" and cred_data.key then
-                    index["jwt-auth:" .. cred_data.key] = app.name
+                    index["jwt-auth:" .. cred_data.key] = consumer.name
                 elseif cred_type == "hmac-auth" and cred_data.key then
-                    index["hmac-auth:" .. cred_data.key] = app.name
+                    index["hmac-auth:" .. cred_data.key] = consumer.name
                 end
             end
         end
@@ -64,37 +64,37 @@ local function build_credential_index(apps)
     return index
 end
 
--- 重建应用数据
-local function rebuild_applications()
-    local apps, err = load_applications_from_store()
+-- 重建消费者数据
+local function rebuild_consumers()
+    local items, err = load_consumers_from_store()
     if err then
-        ngx.log(ngx.WARN, "[sys.application] failed to load applications: ", err)
+        ngx.log(ngx.WARN, "[sys.consumer] failed to load consumers: ", err)
         return false
     end
 
-    -- 构建应用索引
-    local app_map = {}
-    for _, app in ipairs(apps) do
-        if app.name then
-            app_map[app.name] = app
+    -- 构建消费者索引
+    local consumer_map = {}
+    for _, consumer in ipairs(items) do
+        if consumer.name then
+            consumer_map[consumer.name] = consumer
         end
     end
 
     -- 构建凭证索引
-    local cred_idx = build_credential_index(apps)
+    local cred_idx = build_credential_index(items)
 
-    applications = app_map
+    consumers = consumer_map
     credential_index = cred_idx
     current_version = store.get_version()
 
-    ngx.log(ngx.INFO, "[sys.application] applications rebuilt, count: ", #apps,
+    ngx.log(ngx.INFO, "[sys.consumer] consumers rebuilt, count: ", #items,
             ", credentials: ", (function() local c = 0; for _ in pairs(cred_idx) do c = c + 1 end; return c end)())
 
     return true
 end
 
 -- Worker 初始化
-local function worker_init_applications(premature)
+local function worker_init_consumers(premature)
     if premature then
         return
     end
@@ -108,15 +108,15 @@ local function worker_init_applications(premature)
     end
 
     if not store.is_initialized() then
-        ngx.log(ngx.ERR, "[sys.application] store not initialized after ", max_wait, "s")
+        ngx.log(ngx.ERR, "[sys.consumer] store not initialized after ", max_wait, "s")
         return
     end
 
-    local ok = rebuild_applications()
+    local ok = rebuild_consumers()
     if ok then
-        ngx.log(ngx.INFO, "[sys.application] worker initialized applications successfully")
+        ngx.log(ngx.INFO, "[sys.consumer] worker initialized consumers successfully")
     else
-        ngx.log(ngx.WARN, "[sys.application] worker failed to initialize applications")
+        ngx.log(ngx.WARN, "[sys.consumer] worker failed to initialize consumers")
     end
 end
 
@@ -143,15 +143,15 @@ local function coordinator_sync(premature)
 
             if new_version ~= current_version then
                 local ok, post_err = events.post(
-                    _M.events_source_application,
-                    _M.events_type_rebuild_application,
+                    _M.events_source_consumer,
+                    _M.events_type_rebuild_consumer,
                     { version = new_version }
                 )
 
                 if post_err then
-                    ngx.log(ngx.WARN, "[sys.application] failed to broadcast rebuild signal: ", post_err)
+                    ngx.log(ngx.WARN, "[sys.consumer] failed to broadcast rebuild signal: ", post_err)
                 else
-                    ngx.log(ngx.INFO, "[sys.application] broadcasted rebuild signal, version: ", new_version)
+                    ngx.log(ngx.INFO, "[sys.consumer] broadcasted rebuild signal, version: ", new_version)
                     current_version = new_version
                 end
             end
@@ -164,15 +164,15 @@ end
 -- Worker 事件处理器
 local function worker_event_handler_register()
     local rebuild_handler = function(data, event, source)
-        if source ~= _M.events_source_application or event ~= _M.events_type_rebuild_application then
+        if source ~= _M.events_source_consumer or event ~= _M.events_type_rebuild_consumer then
             return
         end
 
-        ngx.log(ngx.INFO, "[sys.application] received rebuild signal, version: ", data and data.version or "unknown")
-        rebuild_applications()
+        ngx.log(ngx.INFO, "[sys.consumer] received rebuild signal, version: ", data and data.version or "unknown")
+        rebuild_consumers()
     end
 
-    events.register(rebuild_handler, _M.events_source_application, _M.events_type_rebuild_application)
+    events.register(rebuild_handler, _M.events_source_consumer, _M.events_type_rebuild_consumer)
 end
 
 -- ============================================================
@@ -181,35 +181,35 @@ end
 
 function _M.init_worker()
     worker_event_handler_register()
-    ngx_timer_at(0, worker_init_applications)
+    ngx_timer_at(0, worker_init_consumers)
 
     if ngx_process.type() == "privileged agent" then
         ngx_timer_at(0, coordinator_sync)
     end
 end
 
--- 通过名称获取应用
+-- 通过名称获取消费者
 function _M.get_by_name(name)
-    return applications[name]
+    return consumers[name]
 end
 
--- 通过凭证查找应用
+-- 通过凭证查找消费者
 -- @param cred_type string 凭证类型 (key-auth, basic-auth, jwt-auth 等)
 -- @param credential string 凭证值 (API key, username, JWT key 等)
--- @return application table 或 nil
+-- @return consumer table 或 nil
 function _M.find_by_credential(cred_type, credential)
     if not cred_type or not credential then
         return nil
     end
     
     local key = cred_type .. ":" .. credential
-    local app_name = credential_index[key]
+    local consumer_name = credential_index[key]
     
-    if not app_name then
+    if not consumer_name then
         return nil
     end
     
-    return applications[app_name]
+    return consumers[consumer_name]
 end
 
 -- 验证 API Key
@@ -219,29 +219,29 @@ end
 
 -- 验证 Basic Auth
 function _M.verify_basic_auth(username)
-    local app = _M.find_by_credential("basic-auth", username)
-    if not app then
+    local consumer = _M.find_by_credential("basic-auth", username)
+    if not consumer then
         return nil
     end
     
-    -- 返回应用及密码供验证
-    return app, app.credentials and app.credentials["basic-auth"] and app.credentials["basic-auth"].password
+    -- 返回消费者及密码供验证
+    return consumer, consumer.credentials and consumer.credentials["basic-auth"] and consumer.credentials["basic-auth"].password
 end
 
 -- 验证 JWT Key
 function _M.verify_jwt_auth(jwt_key)
-    local app = _M.find_by_credential("jwt-auth", jwt_key)
-    if not app then
+    local consumer = _M.find_by_credential("jwt-auth", jwt_key)
+    if not consumer then
         return nil
     end
     
-    -- 返回应用及 secret
-    return app, app.credentials and app.credentials["jwt-auth"] and app.credentials["jwt-auth"].secret
+    -- 返回消费者及 secret
+    return consumer, consumer.credentials and consumer.credentials["jwt-auth"] and consumer.credentials["jwt-auth"].secret
 end
 
--- 获取所有应用 (调试用)
+-- 获取所有消费者 (调试用)
 function _M.get_all()
-    return applications
+    return consumers
 end
 
 return _M

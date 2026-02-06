@@ -99,12 +99,12 @@ function _M.get_routes()
     return adapter.get_routes()
 end
 
--- 获取所有应用
-function _M.get_applications()
+-- 获取所有消费者
+function _M.get_consumers()
     if not adapter then
         return nil, "store not initialized"
     end
-    return adapter.get_applications()
+    return adapter.get_consumers()
 end
 
 -- 获取所有证书

@@ -63,7 +63,7 @@ local function validate_config(config)
         backends = true,
         services = true,
         routes = true,
-        applications = true,
+        consumers = true,
         certificates = true,
     }
     
@@ -120,7 +120,7 @@ local function load_config()
         backends = build_index_by_name(data.backends),
         services = build_index_by_name(data.services),
         routes = build_index_by_name(data.routes),
-        applications = build_index_by_name(data.applications),
+        consumers = build_index_by_name(data.consumers),
         certificates = build_index_by_name(data.certificates),
     }
     
@@ -241,12 +241,12 @@ function _M.get_routes()
     return config_data.routes or {}, nil
 end
 
--- 获取所有应用
-function _M.get_applications()
+-- 获取所有消费者
+function _M.get_consumers()
     if not config_data then
         return nil, "config not loaded"
     end
-    return config_data.applications or {}, nil
+    return config_data.consumers or {}, nil
 end
 
 -- 获取所有证书
@@ -289,11 +289,11 @@ function _M.get_route_by_name(name)
     return config_data._index.routes[name]
 end
 
-function _M.get_application_by_name(name)
+function _M.get_consumer_by_name(name)
     if not config_data or not config_data._index then
         return nil, "config not loaded"
     end
-    return config_data._index.applications[name]
+    return config_data._index.consumers[name]
 end
 
 function _M.get_certificate_by_name(name)

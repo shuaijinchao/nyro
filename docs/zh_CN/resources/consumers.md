@@ -1,16 +1,16 @@
-# Applications（应用）
+# Consumers（消费者）
 
 ## 作用
 
-`applications` 定义 API 调用方/消费者，用于身份认证和访问控制。每个应用可配置多种凭证类型和专属插件。
+`consumers` 定义 API 消费者，用于身份认证和访问控制。每个消费者可配置多种凭证类型和专属插件。
 
 ## 配置说明
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `name` | string | 是 | 应用名称，唯一标识 |
+| `name` | string | 是 | 消费者名称，唯一标识 |
 | `credentials` | object | 是 | 凭证配置 |
-| `plugins` | array | 否 | 应用级别插件 |
+| `plugins` | array | 否 | 消费者级别插件 |
 
 ### credentials 配置
 
@@ -47,7 +47,7 @@ credentials:
 ### 基础配置
 
 ```yaml
-applications:
+consumers:
   - name: mobile-app
     credentials:
       key-auth:
@@ -57,7 +57,7 @@ applications:
 ### 多种认证方式
 
 ```yaml
-applications:
+consumers:
   - name: web-app
     credentials:
       key-auth:
@@ -70,7 +70,7 @@ applications:
 ### 带插件配置
 
 ```yaml
-applications:
+consumers:
   - name: partner-api
     credentials:
       key-auth:
@@ -89,10 +89,10 @@ applications:
 
 1. 客户端请求携带凭证（如 API Key、JWT 等）
 2. 认证插件（如 `key-auth`）从请求中提取凭证
-3. 系统通过凭证查找对应的 application
-4. 认证成功后，应用的专属插件生效
+3. 系统通过凭证查找对应的 consumer
+4. 认证成功后，消费者的专属插件生效
 
 ## 关联资源
 
 - 被认证类插件（`key-auth`、`jwt-auth` 等）使用
-- 应用级插件对该应用的所有请求生效
+- 消费者级插件对该消费者的所有请求生效

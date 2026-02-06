@@ -13,7 +13,7 @@ services (服务抽象)
     │
 routes (路由规则)
 
-applications (消费者认证)
+consumers (消费者认证)
 
 certificates (SSL 证书)
 ```
@@ -31,7 +31,7 @@ certificates (SSL 证书)
 | [backends](./backends.md) | 后端服务器集群 | 负载均衡、健康检查 |
 | [services](./services.md) | 上游服务抽象 | 引用 backend 或 URL 代理 |
 | [routes](./routes.md) | 请求路由规则 | 路径、方法、域名匹配 |
-| [applications](./applications.md) | API 消费者 | 身份认证、凭证管理 |
+| [consumers](./consumers.md) | API 消费者 | 身份认证、凭证管理 |
 | [certificates](./certificates.md) | SSL 证书 | HTTPS 加密 |
 | [plugins](./plugins.md) | 功能插件 | 认证、限流、安全 |
 

@@ -1,5 +1,6 @@
 local nginx_signals = require "apioak/cli/utils/nginx_signals"
-local env           = require"apioak/cli/env"
+local env           = require "apioak/cli/env"
+local generator     = require "apioak/cli/generator"
 
 local lapp = [[
 Usage: apioak start
@@ -7,6 +8,7 @@ Usage: apioak start
 
 local function execute()
     env.execute()
+    generator.generate()
     print("----------------------------")
 
     nginx_signals.start()

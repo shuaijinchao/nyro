@@ -66,8 +66,8 @@ build = {
         -- Service modules (services resource)
         ["apioak.service"] = "apioak/service/init.lua",
 
-        -- Application modules (applications resource)
-        ["apioak.application"] = "apioak/application/init.lua",
+        -- Consumer modules (consumers resource)
+        ["apioak.consumer"] = "apioak/consumer/init.lua",
 
         -- Certificate modules (certificates resource)
         ["apioak.certificate"] = "apioak/certificate/init.lua",
@@ -119,5 +119,7 @@ build = {
         ["apioak.cli.utils.common"] = "apioak/cli/utils/common.lua",
         ["apioak.cli.utils.kill"] = "apioak/cli/utils/kill.lua",
         ["apioak.cli.utils.nginx_signals"] = "apioak/cli/utils/nginx_signals.lua",
+        ["apioak.cli.generator"] = "apioak/cli/generator.lua",
+        ["apioak.cli.templates.nginx_conf"] = "apioak/cli/templates/nginx_conf.lua",
     },
 }
