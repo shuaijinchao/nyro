@@ -1,38 +1,38 @@
-## 为 APIOAK 贡献
+## 为 NYRO 贡献
 
-你可以通过以下形式为 `APIOAK` 项目做出贡献。
+你可以通过以下形式为 `NYRO` 项目做出贡献。
 
 - 通过 `Issues` 报告错误或使用问题以供我们修复。
 
-- 通过 `Pull Request` 为APIOAK贡献代码、文档或测试用例等。
+- 通过 `Pull Request` 为NYRO贡献代码、文档或测试用例等。
 
 
 ### 如何通过 Issues 报告问题
 
-- 通过 [Issues](https://github.com/apioak/apioak/issues) 搜索该问题并不存在。
+- 通过 [Issues](https://github.com/nyro/nyro/issues) 搜索该问题并不存在。
 
-- 打开 [New Issues](https://github.com/apioak/apioak/issues/new) 在标题中简要描述问题。在内容中描述详细的版本、运行环境、及日志
+- 打开 [New Issues](https://github.com/nyro/nyro/issues/new) 在标题中简要描述问题。在内容中描述详细的版本、运行环境、及日志
 等信息。
 
 Issues 的标题应该以前缀形式标记问题类型，例如： 
 > * bug: upstream uir redirect failure. 
-> * question: how APIOAK works.  
+> * question: how NYRO works.  
 
 
 ### 如何通过 Pull Request 贡献代码
 
 - 新功能开发前或发现问题时可以先通过 `Issues` 方式进行公告或报告。
 
-- 如果你是首次为 `APIOAK` 贡献代码，需要在项目主页右上角点击 `Fork` 按钮，把项目 `Fork` 到自己的家目录中。  
+- 如果你是首次为 `NYRO` 贡献代码，需要在项目主页右上角点击 `Fork` 按钮，把项目 `Fork` 到自己的家目录中。  
 
 - 克隆家目录中的项目到本地。
 ```shell
-git clone https://github.com/{username}/apioak.git
+git clone https://github.com/{username}/nyro.git
 ```
 
 - 在本地添加主干仓库地址，用于拉取最新代码。
 ```shell
-git remote add upstream https://github.com/apioak/apioak.git
+git remote add upstream https://github.com/nyro/nyro.git
 ```
 
 - 每次开发前从上游仓库中 checkout 新分支，注意：每个分支只做一件事，禁止多个功能一次性提交。

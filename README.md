@@ -1,13 +1,13 @@
 <p align="center">
-  <img width="150" src="doc/images/APIOPAK-logo.png">
+  <img width="150" src="docs/images/NYRO-logo.png">
 </p>
 
 <p align="center">
-  <a href="https://github.com/apioak/apioak">
-    <img src="https://img.shields.io/badge/Apioak-Master-blue" alt="Apioak-Master">
+  <a href="https://github.com/nyro/nyro">
+    <img src="https://img.shields.io/badge/Nyro-Master-blue" alt="Nyro-Master">
   </a>
 
-  <a href="https://github.com/apioak/apioak/blob/master/LICENSE">
+  <a href="https://github.com/nyro/nyro/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License-Apache">
   </a>
 </p>
@@ -15,14 +15,14 @@
 
 [简体中文](README_CN.md) | [English](README.md)
 
-APIOAK provides full life cycle management of API release, management, and operation and maintenance. Assist users in simple, fast, low-cost, low-risk implementation of microservice aggregation, front-end and back-end separation, system integration, and open functions and data to partners and developers.
+NYRO provides full life cycle management of API release, management, and operation and maintenance. Assist users in simple, fast, low-cost, low-risk implementation of microservice aggregation, front-end and back-end separation, system integration, and open functions and data to partners and developers.
 
 
-## Why APIOAK
+## Why NYRO
 
-APIOAK performance is almost comparable to native `Nginx`, and provides dynamic authentication, flow control and other functions through the plug-in mechanism, and supports custom plug-ins according to specific business scenarios. It also provides a multiple of dynamic load balancing strategies and a powerful and easy-to-use console management panel.
+NYRO performance is almost comparable to native `Nginx`, and provides dynamic authentication, flow control and other functions through the plug-in mechanism, and supports custom plug-ins according to specific business scenarios. It also provides a multiple of dynamic load balancing strategies and a powerful and easy-to-use console management panel.
 
-![APIOAK](doc/images/APIOAK-process.png)
+![NYRO](docs/images/NYRO-process.png)
 
 
 ## Features
@@ -80,15 +80,15 @@ APIOAK performance is almost comparable to native `Nginx`, and provides dynamic 
 
 ## Installation
 
-For the system dependencies necessary to install `APIOAK` on different operating systems (`OpenResty >= 1.15.8.2`, `luarocks >= 2.3`, `Consul >= 1.13`, etc.), please refer to: [Dependency Installation Documentation]( doc/en_US/install-dependencies.md).
+For the system dependencies necessary to install `NYRO` on different operating systems (`OpenResty >= 1.15.8.2`, `luarocks >= 2.3`, `Consul >= 1.13`, etc.), please refer to: [Dependency Installation Documentation]( docs/en_US/install-dependencies.md).
 
 > Installation via LuaRocks
 
 ```shell
-sudo luarocks install apioak
+sudo luarocks install nyro
 ```
 
-Please get corresponding version of `RPM` or `DEB` package in [Releases](https://github.com/apioak/apioak/releases).
+Please get corresponding version of `RPM` or `DEB` package in [Releases](https://github.com/nyro/nyro/releases).
 
 > Installation via RPM Package (CentOS 7)
 
@@ -99,10 +99,10 @@ sudo yum -y install aoioak-{VERSION}-1.el7.x86_64.rpm
 > Installation via DEB Package (Ubuntu 18)
 
 ```shell
-sudo dpkg -i apioak-{VERSION}-1_amd64.deb
+sudo dpkg -i nyro-{VERSION}-1_amd64.deb
 ```
 
-Install by downloading the source code, find the source package of the corresponding version in [Releases](https://github.com/apioak/apioak/releases), or directly use `git` to clone the project.
+Install by downloading the source code, find the source package of the corresponding version in [Releases](https://github.com/nyro/nyro/releases), or directly use `git` to clone the project.
 
 > Install from source
 
@@ -112,27 +112,27 @@ sudo make deps && sudo make install
 
 ## Quickstart
 
-> Configure APIOAK
+> Configure NYRO
 
-- Edit the connection information of the `consul` item in the `APIOAK` configuration file, the configuration file path `/path/conf/apioak.yaml`.
+- Edit the connection information of the `consul` item in the `NYRO` configuration file, the configuration file path `/path/conf/nyro.yaml`.
 
 > Check dependencies and configuration
 
 ```bash
-sudo apioak env
+sudo nyro env
 ```
 
-> Launch APIOAK
+> Launch NYRO
 
 ```bash
-sudo apioak start
+sudo nyro start
 ```
 
-> Access APIOAK
+> Access NYRO
 
-- Enter `http://127.0.0.1:10888` in the browser to access `Welcome to APIOAK`.
+- Enter `http://127.0.0.1:10888` in the browser to access `Welcome to NYRO`.
 
-At this point, `APIOAK` has all been installed and configured, please enjoy it.
+At this point, `NYRO` has all been installed and configured, please enjoy it.
 
 
 ## Benchmark
@@ -166,23 +166,23 @@ Requests/sec:  24012.38
 
 ## FlameGraph
 
-![FlameGraph](doc/images/APIOAK-flamegraph.svg)
+![FlameGraph](docs/images/NYRO-flamegraph.svg)
 
 
 ## Documentation
 
-See [APIOAK's Documentation](https://github.com/apioak/apioak-document).
+See [NYRO's Documentation](https://github.com/nyro/nyro-document).
 
 
 ## Landscape
 
 <img src="https://landscape.cncf.io/images/left-logo.svg" width="150">&nbsp;&nbsp;<img src="https://landscape.cncf.io/images/right-logo.svg" width="200" />
 
-APIOAK enriches the [CNCF API Gateway Landscape](https://landscape.cncf.io/card-mode?category=api-gateway&grouping=category)
+NYRO enriches the [CNCF API Gateway Landscape](https://landscape.cncf.io/card-mode?category=api-gateway&grouping=category)
 
 
 ## Communicate
 
-Welcome to join the APIOAK gateway exchange group for common communication and progress.
+Welcome to join the NYRO gateway exchange group for common communication and progress.
 
-<img width="260px;" src="./doc/images/APIOAK-QQ.png">
+<img width="260px;" src="./docs/images/NYRO-QQ.png">

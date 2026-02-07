@@ -1,0 +1,8 @@
+#!/usr/bin/env resty
+
+-- NYRO CLI entry point
+-- This script is installed by LuaRocks and will automatically use the correct paths
+
+require("nyro.cli.utils.common")
+
+require("nyro.cli.init")(arg)

@@ -72,4 +72,4 @@ certificates:
 
 1. 证书和私钥必须是 PEM 格式
 2. 通配符证书只匹配一级子域名（`*.example.com` 不匹配 `a.b.example.com`）
-3. 文件路径方式需确保 APIOAK 进程有读取权限
+3. 文件路径方式需确保 NYRO 进程有读取权限
