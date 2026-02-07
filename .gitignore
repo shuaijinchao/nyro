@@ -47,9 +47,12 @@ lua_modules
 share
 lib
 
-# Logs directory
-logs/
-
 # Generated files (auto-generated at startup)
 conf/nginx.conf
+logs/
 ssl/
+uwsgi_temp/
+scgi_temp/
+proxy_temp/
+fastcgi_temp/
+client_body_temp/

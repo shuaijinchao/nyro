@@ -3,6 +3,7 @@ local common = require("nyro/cli/utils/common")
 local _M = {}
 
 function _M.start()
+    os.execute("mkdir -p " .. common.nyro_home .. "/logs")
     local cmd = common.openresty_launch
     os.execute(cmd)
 end
