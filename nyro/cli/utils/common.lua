@@ -1,0 +1,52 @@
+local script_path = debug.getinfo(1).source:sub(2)
+
+local function trim(s)
+    return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+local function execute_cmd(cmd)
+    local t = io.popen(cmd)
+    local data = t:read("*all")
+    t:close()
+    return data
+end
+
+local nyro_home
+if script_path:sub(1, 4) == '/usr' or script_path:sub(1, 4) == '/bin' then
+    -- 系统安装模式：使用标准 LuaRocks tree 路径
+    nyro_home = "/usr/local/nyro"
+    package.cpath = "/usr/local/nyro/lib/lua/5.1/?.so;"
+            .. package.cpath
+
+    package.path = "/usr/local/nyro/share/lua/5.1/?.lua;"
+            .. "/usr/local/nyro/share/lua/5.1/?/init.lua;"
+            .. package.path
+else
+    -- 开发模式：优先使用源码，依赖使用 lua_modules
+    nyro_home = trim(execute_cmd("pwd"))
+    local lua_modules_path = nyro_home .. "/lua_modules"
+
+    package.cpath = lua_modules_path .. "/lib/lua/5.1/?.so;"
+            .. package.cpath
+
+    package.path = nyro_home .. "/?.lua;"
+            .. nyro_home .. "/?/init.lua;"
+            .. lua_modules_path .. "/share/lua/5.1/?.lua;"
+            .. lua_modules_path .. "/share/lua/5.1/?/init.lua;"
+            .. package.path
+end
+
+local openresty_bin = trim(execute_cmd("which openresty"))
+if not openresty_bin then
+    error("can not find the openresty.")
+end
+
+local openresty_launch = openresty_bin .. [[  -p ]] .. nyro_home .. [[ -c ]]
+        .. nyro_home .. [[/conf/nginx.conf]]
+
+return {
+    nyro_home = nyro_home,
+    openresty_launch = openresty_launch,
+    trim = trim,
+    execute_cmd = execute_cmd,
+}

@@ -1,13 +1,13 @@
 <p align="center">
-  <img width="150" src="doc/images/APIOPAK-logo.png">
+  <img width="150" src="docs/images/NYRO-logo.png">
 </p>
 
 <p align="center">
-  <a href="https://github.com/apioak/apioak">
-    <img src="https://img.shields.io/badge/Apioak-Master-blue" alt="Apioak-Master">
+  <a href="https://github.com/nyro/nyro">
+    <img src="https://img.shields.io/badge/Nyro-Master-blue" alt="Nyro-Master">
   </a>
 
-  <a href="https://github.com/apioak/apioak/blob/master/LICENSE">
+  <a href="https://github.com/nyro/nyro/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License-Apache">
   </a>
 </p>
@@ -16,14 +16,14 @@
 [简体中文](README_CN.md) | [English](README.md)
 
 
-APIOAK 提供API发布、管理、运维的全生命周期管理。辅助用户简单、快速、低成本、低风险的实现微服务聚合、前后端分离、系统集成，向合作伙伴、开发者开放功能和数据。
+NYRO 提供API发布、管理、运维的全生命周期管理。辅助用户简单、快速、低成本、低风险的实现微服务聚合、前后端分离、系统集成，向合作伙伴、开发者开放功能和数据。
 
 
-## 为什么选择APIOAK
+## 为什么选择NYRO
 
-APIOAK 提供了几乎可以媲美原生 `Nginx` 的强劲性能，通过插件机制提供动态身份认证、流量控制等功能，并支持根据特定业务场景的自定义插件。同时还提供了多种动态负载均衡策略和功能强大易用的控制台管理面板。
+NYRO 提供了几乎可以媲美原生 `Nginx` 的强劲性能，通过插件机制提供动态身份认证、流量控制等功能，并支持根据特定业务场景的自定义插件。同时还提供了多种动态负载均衡策略和功能强大易用的控制台管理面板。
 
-![APIOAK](doc/images/APIOAK-process.png)
+![NYRO](docs/images/NYRO-process.png)
 
 
 ## 功能
@@ -81,15 +81,15 @@ APIOAK 提供了几乎可以媲美原生 `Nginx` 的强劲性能，通过插件�
 
 ## 安装
 
-在不同的操作系统上安装 `APIOAK` 所必需的系统依赖（`OpenResty >= 1.15.8.2`、`luarocks >= 2.3`、`Consul >= 1.13`等），请参见：[依赖安装文档](doc/zh_CN/install-dependencies.md)。
+在不同的操作系统上安装 `NYRO` 所必需的系统依赖（`OpenResty >= 1.15.8.2`、`luarocks >= 2.3`、`Consul >= 1.13`等），请参见：[依赖安装文档](docs/zh_CN/install-dependencies.md)。
 
 > 通过 LuaRocks 安装
 
 ```shell
-sudo luarocks install apioak
+sudo luarocks install nyro
 ```
 
-可以在 [发行列表（gitee）](https://gitee.com/apioak/apioak/releases) 中获得相应版本的 `RPM` 或 `DEB` 安装包。
+可以在 [发行列表（gitee）](https://gitee.com/nyro/nyro/releases) 中获得相应版本的 `RPM` 或 `DEB` 安装包。
 
 > 通过 PRM 安装 (CentOS 7)
 
@@ -100,10 +100,10 @@ sudo yum -y install aoioak-{VERSION}-1.el7.x86_64.rpm
 > 通过 DEB 安装 (Ubuntu 18)
 
 ```shell
-sudo dpkg -i apioak-{VERSION}-1_amd64.deb
+sudo dpkg -i nyro-{VERSION}-1_amd64.deb
 ```
 
-通过下载源码的方式进行安装，在 [发行列表（gitee）](https://gitee.com/apioak/apioak/releases) 中找到对应版本的源码包，或者直接使用`git`进行clone项目。
+通过下载源码的方式进行安装，在 [发行列表（gitee）](https://gitee.com/nyro/nyro/releases) 中找到对应版本的源码包，或者直接使用`git`进行clone项目。
 
 > 通过 源码 安装
 
@@ -113,26 +113,26 @@ sudo make deps && sudo make install
 
 ## 快速开始
 
-> 配置 APIOAK
+> 配置 NYRO
 
-- 编辑 `APIOAK` 配置文件中 `consul` 项的连接信息，配置文件路径 `/path/conf/apioak.yaml`。
+- 编辑 `NYRO` 配置文件中 `consul` 项的连接信息，配置文件路径 `/path/conf/nyro.yaml`。
 
 > 检测依赖和配置
 ```bash
-sudo apioak env
+sudo nyro env
 ```
 
-> 启动 APIOAK
+> 启动 NYRO
 
 ```bash
-sudo apioak start
+sudo nyro start
 ```
 
-> 访问 APIOAK
+> 访问 NYRO
 
-- 浏览器输入 `http://127.0.0.1:10888` 访问出现 `Welcome to APIOAK`。
+- 浏览器输入 `http://127.0.0.1:10888` 访问出现 `Welcome to NYRO`。
 
-至此，`APIOAK` 已全部安装并配置完毕，请尽情享受。
+至此，`NYRO` 已全部安装并配置完毕，请尽情享受。
 
 
 ## 性能
@@ -167,22 +167,22 @@ Requests/sec:  24012.38
 
 ## 火焰图
 
-![FlameGraph](doc/images/APIOAK-flamegraph.svg)
+![FlameGraph](docs/images/NYRO-flamegraph.svg)
 
 
 ## 文档
 
-请参阅 [APIOAK文档](https://github.com/apioak/apioak-document)。
+请参阅 [NYRO文档](https://github.com/nyro/nyro-document)。
 
 
 ## 全景图
 
 <img src="https://landscape.cncf.io/images/left-logo.svg" width="150">&nbsp;&nbsp;<img src="https://landscape.cncf.io/images/right-logo.svg" width="200" />
 
-APIOAK 被纳入 [云原生计算基金会API网关全景图](https://landscape.cncf.io/card-mode?category=api-gateway&grouping=category)
+NYRO 被纳入 [云原生计算基金会API网关全景图](https://landscape.cncf.io/card-mode?category=api-gateway&grouping=category)
 
 
 ## 交流
-欢迎加入APIOAK网关交流群进行共同交流与进步。
+欢迎加入NYRO网关交流群进行共同交流与进步。
 
-<img width="260px;" src="./doc/images/APIOAK-QQ.png">
+<img width="260px;" src="./docs/images/NYRO-QQ.png">

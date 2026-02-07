@@ -43,7 +43,13 @@ luac.out
 .vscode
 
 # LuaRocks installation directories
-deps
 lua_modules
 share
 lib
+
+# Logs directory
+logs/
+
+# Generated files (auto-generated at startup)
+conf/nginx.conf
+ssl/

@@ -1,9 +1,17 @@
 UNAME            ?= $(shell uname)
 REMOVE           ?= rm -rf
-APIOAK_DIR       ?= /usr/local/apioak
+NYRO_DIR       ?= /usr/local/nyro
 
 # Rockspec file
-ROCKSPEC         := rockspec/apioak-master-0.rockspec
+ROCKSPEC         := rockspec/nyro-master-0.rockspec
+
+# Router engine library
+ROUTER_LIB_DIR   := deps/nyro
+ifeq ($(UNAME), Darwin)
+    ROUTER_LIB   := libnyro_router.dylib
+else
+    ROUTER_LIB   := libnyro_router.so
+endif
 
 # Detect OpenResty LuaJIT path
 ifeq ($(UNAME), Darwin)
@@ -22,76 +30,88 @@ endif
 
 .PHONY: install
 install:
-	@echo "Installing APIOAK using luarocks..."
+	@echo "Building nyro_router C library..."
+	cd $(ROUTER_LIB_DIR) && make
+	@echo "Installing nyro_router library to system..."
+	cd $(ROUTER_LIB_DIR) && make install
+	@echo "Installing NYRO using luarocks..."
 	@echo "Using Lua/LuaJIT at: $(LUAJIT_DIR)"
-	luarocks make $(ROCKSPEC) --tree=$(APIOAK_DIR) $(LUAROCKS_FLAGS)
+	luarocks make $(ROCKSPEC) --tree=$(NYRO_DIR) $(LUAROCKS_FLAGS)
 	@echo "Installing binary and configuration files..."
-	@mkdir -p $(APIOAK_DIR)/bin
-	@mkdir -p $(APIOAK_DIR)/conf/cert
-	@install -m 755 bin/apioak $(APIOAK_DIR)/bin/apioak
-	@install -m 644 conf/apioak.yaml $(APIOAK_DIR)/conf/apioak.yaml
-	@install -m 644 conf/nginx.conf $(APIOAK_DIR)/conf/nginx.conf
-	@install -m 644 conf/mime.types $(APIOAK_DIR)/conf/mime.types
-	@install -m 644 conf/cert/apioak.crt $(APIOAK_DIR)/conf/cert/apioak.crt
-	@install -m 600 conf/cert/apioak.key $(APIOAK_DIR)/conf/cert/apioak.key
+	@mkdir -p $(NYRO_DIR)/bin
+	@mkdir -p $(NYRO_DIR)/lib
+	@install -m 755 bin/nyro $(NYRO_DIR)/bin/nyro
+	@install -m 644 conf/nyro.yaml $(NYRO_DIR)/conf/nyro.yaml
+	@install -m 644 conf/config.yaml $(NYRO_DIR)/conf/config.yaml
+	@cp $(ROUTER_LIB_DIR)/$(ROUTER_LIB) $(NYRO_DIR)/lib/
 	@echo ""
 	@echo "✅ Installation complete!"
 	@echo ""
-	@echo "APIOAK modules installed to: $(APIOAK_DIR)/share/lua/5.1/"
-	@echo "APIOAK dependencies installed to: $(APIOAK_DIR)/lib/lua/5.1/"
-	@echo "Binary installed to: $(APIOAK_DIR)/bin/apioak"
-	@echo "Configuration files installed to: $(APIOAK_DIR)/conf/"
+	@echo "NYRO modules installed to: $(NYRO_DIR)/share/lua/5.1/"
+	@echo "NYRO dependencies installed to: $(NYRO_DIR)/lib/lua/5.1/"
+	@echo "Router engine installed to: $(NYRO_DIR)/lib/$(ROUTER_LIB)"
+	@echo "Binary installed to: $(NYRO_DIR)/bin/nyro"
+	@echo "Configuration files installed to: $(NYRO_DIR)/conf/"
 	@echo ""
-	@echo "To use APIOAK, add to your PATH:"
-	@echo "  export PATH=$(APIOAK_DIR)/bin:\$$PATH"
+	@echo "To use NYRO, add to your PATH:"
+	@echo "  export PATH=$(NYRO_DIR)/bin:\$$PATH"
 	@echo ""
 	@echo "Then you can run:"
-	@echo "  apioak version"
-	@echo "  apioak start"
+	@echo "  nyro version"
+	@echo "  nyro start"
 
 .PHONY: dev
 dev:
-	@echo "Installing APIOAK for development..."
+	@echo "Building nyro_router C library..."
+	cd $(ROUTER_LIB_DIR) && make
+	@echo "Installing nyro_router library for development..."
+	cd $(ROUTER_LIB_DIR) && make dev
+	@echo "Installing NYRO for development..."
 	@echo "Using Lua/LuaJIT at: $(LUAJIT_DIR)"
 	luarocks make $(ROCKSPEC) --tree=./lua_modules $(LUAROCKS_FLAGS)
 	@echo ""
 	@echo "✅ Development installation complete!"
 	@echo ""
-	@echo "You can now run APIOAK directly:"
-	@echo "  ./bin/apioak version"
-	@echo "  ./bin/apioak start"
+	@echo "You can now run NYRO directly:"
+	@echo "  ./bin/nyro version"
+	@echo "  ./bin/nyro start"
 	@echo ""
 	@echo "Note: The CLI automatically detects ./lua_modules/ and adds it to the search path."
+	@echo "      Router engine library is at: ./lua_modules/lib/$(ROUTER_LIB)"
 
 .PHONY: uninstall
 uninstall:
-	@echo "Uninstalling APIOAK..."
-	luarocks remove apioak --tree=$(APIOAK_DIR) 2>/dev/null || true
+	@echo "Uninstalling NYRO..."
+	luarocks remove nyro --tree=$(NYRO_DIR) 2>/dev/null || true
 	@echo "Removing binary and configuration files..."
-	@$(REMOVE) $(APIOAK_DIR)/bin/apioak
-	@$(REMOVE) $(APIOAK_DIR)/conf
-	@echo "APIOAK has been uninstalled."
+	@$(REMOVE) $(NYRO_DIR)/bin/nyro
+	@$(REMOVE) $(NYRO_DIR)/conf
+	@$(REMOVE) $(NYRO_DIR)/lib/$(ROUTER_LIB)
+	@echo "NYRO has been uninstalled."
 
 .PHONY: clean
 clean:
+	@echo "Cleaning nyro_router build files..."
+	cd $(ROUTER_LIB_DIR) && make clean
 	@echo "Cleaning local development installation..."
 	$(REMOVE) ./lua_modules
 	@echo "Clean complete!"
 
 .PHONY: help
 help:
-	@echo "APIOAK Makefile targets:"
+	@echo "NYRO Makefile targets:"
 	@echo ""
-	@echo "  make install     - Install APIOAK and all dependencies to $(APIOAK_DIR)"
-	@echo "  make dev         - Install APIOAK for local development (./lua_modules)"
-	@echo "  make uninstall   - Uninstall APIOAK from $(APIOAK_DIR)"
-	@echo "  make clean       - Clean local development files"
+	@echo "  make install     - Build C library and install NYRO to $(NYRO_DIR)"
+	@echo "  make dev         - Build C library and install for local development"
+	@echo "  make uninstall   - Uninstall NYRO from $(NYRO_DIR)"
+	@echo "  make clean       - Clean all build files and local installation"
 	@echo "  make help        - Show this help message"
 	@echo ""
 	@echo "Variables:"
-	@echo "  APIOAK_DIR       - Installation directory (default: /usr/local/apioak)"
+	@echo "  NYRO_DIR       - Installation directory (default: /usr/local/nyro)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make install"
-	@echo "  make install APIOAK_DIR=/opt/apioak"
-	@echo "  make install APIOAK_DIR=/usr/local/openresty/site"
+	@echo "  make dev"
+	@echo "  make install NYRO_DIR=/opt/nyro"
+	@echo "  make install NYRO_DIR=/usr/local/openresty/site"

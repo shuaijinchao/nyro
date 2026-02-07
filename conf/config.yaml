@@ -1,0 +1,17 @@
+#
+# NYRO 声明式配置文件 (DB Less 模式)
+#
+# 最简配置示例：使用 URL 直接代理
+#
+
+version: "1.0"
+
+services:
+  - name: httpbin
+    url: http://httpbin.org
+
+routes:
+  - name: proxy
+    service: httpbin
+    paths:
+      - /*

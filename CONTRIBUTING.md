@@ -1,17 +1,17 @@
-## Contributing to APIOAK
+## Contributing to NYRO
 
-You can contribute to the APIOAK project in the following forms.
+You can contribute to the NYRO project in the following forms.
 
 - Report bugs or usage issues via `Issues` for us to fix.
 
-- Contribute code, documentation or test cases for APIOAK via `Pull Request`.
+- Contribute code, documentation or test cases for NYRO via `Pull Request`.
 
 
 ### How to report a Issues
 
-- Search through [Issues](https://github.com/apioak/apioak/issues) The issue does not exist.
+- Search through [Issues](https://github.com/nyro/nyro/issues) The issue does not exist.
 
-- Open [New Issues](https://github.com/apioak/apioak/issues/new) and briefly describe the issue in the title. Describe 
+- Open [New Issues](https://github.com/nyro/nyro/issues/new) and briefly describe the issue in the title. Describe 
 the detailed version, operating environment, and logs and other information in the content.
 
 
@@ -20,17 +20,17 @@ the detailed version, operating environment, and logs and other information in t
 - Before new features are developed or problems are discovered, they can be announced or reported through the `Issues` 
 method.
 
-- If you are contributing code for APIOAK for the first time, you need to click the `Fork` button in the upper right 
+- If you are contributing code for NYRO for the first time, you need to click the `Fork` button in the upper right 
 corner of the project homepage to put the project` Fork` in your home directory.
 
 - Clone items in home directory to local.
 ```shell
-git clone https://github.com/{username}/apioak.git
+git clone https://github.com/{username}/nyro.git
 ```
 
 - Add the backbone warehouse address locally to pull the latest code.
 ```shell
-git remote add upstream https://github.com/apioak/apioak.git
+git remote add upstream https://github.com/nyro/nyro.git
 ```
 
 - Checkout new branch from upstream repository before each development
