@@ -48,7 +48,8 @@ local function run_plugin(phase, oak_ctx)
                     break
                 end
 
-                router_plugin_object.handler[phase](oak_ctx, router_plugin_object.config)
+                -- 传递路由级嵌套 plugin config (plugins[].config)
+                router_plugin_object.handler[phase](oak_ctx, router_plugins[i].config or {})
 
             until true
         end
@@ -75,7 +76,8 @@ local function run_plugin(phase, oak_ctx)
                     break
                 end
 
-                service_plugin_object.handler[phase](oak_ctx, service_plugin_object.config)
+                -- 传递服务级嵌套 plugin config (plugins[].config)
+                service_plugin_object.handler[phase](oak_ctx, service_plugins[j].config or {})
 
             until true
         end
@@ -173,7 +175,8 @@ function NYRO.http_access()
         core.response.exit(404, { err_message = "\"URI\" Undefined" })
     end
 
-    backend.check_backend(oak_ctx)
+    -- 在 access 阶段完成: 节点选择 + DNS 解析 + endpoint.headers 注入
+    backend.prepare_upstream(oak_ctx)
 
     local matched  = oak_ctx.matched
 
@@ -204,7 +207,14 @@ function NYRO.http_access()
 
     ngx.var.upstream_uri = upstream_uri
 
-    ngx.var.upstream_host = matched.host
+    -- 设置上游 scheme / host (从 prepare_upstream 预计算结果中获取)
+    local up = oak_ctx._upstream
+    if up then
+        ngx.var.upstream_scheme = up.scheme or "http"
+        ngx.var.upstream_host = up.host or matched.host
+    else
+        ngx.var.upstream_host = matched.host
+    end
 
     run_plugin("http_access", oak_ctx)
 end

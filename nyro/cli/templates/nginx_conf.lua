@@ -46,7 +46,7 @@ http {
     set_real_ip_from 127.0.0.1;
     set_real_ip_from unix:;
 
-    more_set_headers 'Server: NYRO API Gateway';
+    more_set_headers 'Server: Nyro Gateway';
 
     lua_code_cache on;
 
@@ -120,6 +120,11 @@ http {
             proxy_set_header   X-Request-Id      $request_id;
             proxy_pass_header  Server;
             proxy_pass_header  Date;
+            proxy_buffering    off;
+
+            proxy_ssl_server_name on;
+            proxy_ssl_name        $upstream_host;
+
             proxy_pass         $upstream_scheme://nyro_backend$upstream_uri;
         }
 

@@ -5,13 +5,14 @@ NYRO_DIR       ?= /usr/local/nyro
 # Rockspec file
 ROCKSPEC         := rockspec/nyro-master-0.rockspec
 
-# Router engine library
-ROUTER_LIB_DIR   := deps/nyro
+# Engine (Rust workspace)
+ENGINE_DIR       := engine
 ifeq ($(UNAME), Darwin)
-    ROUTER_LIB   := libnyro_router.dylib
+    ENGINE_LIB_NAME := libnyro.dylib
 else
-    ROUTER_LIB   := libnyro_router.so
+    ENGINE_LIB_NAME := libnyro.so
 endif
+ENGINE_LIB       := $(ENGINE_DIR)/target/release/$(ENGINE_LIB_NAME)
 
 # Detect OpenResty LuaJIT path
 ifeq ($(UNAME), Darwin)
@@ -28,12 +29,16 @@ else
 	endif
 endif
 
+.PHONY: engine
+engine:
+	@echo "Building Nyro engine (Rust)..."
+	cd $(ENGINE_DIR) && cargo build --release
+	@echo "Engine built: $(ENGINE_LIB)"
+
 .PHONY: install
-install:
-	@echo "Building nyro_router C library..."
-	cd $(ROUTER_LIB_DIR) && make
-	@echo "Installing nyro_router library to system..."
-	cd $(ROUTER_LIB_DIR) && make install
+install: engine
+	@echo "Installing engine library to system..."
+	@install -m 755 $(ENGINE_LIB) /usr/local/lib/$(ENGINE_LIB_NAME)
 	@echo "Installing NYRO using luarocks..."
 	@echo "Using Lua/LuaJIT at: $(LUAJIT_DIR)"
 	luarocks make $(ROCKSPEC) --tree=$(NYRO_DIR) $(LUAROCKS_FLAGS)
@@ -43,13 +48,13 @@ install:
 	@install -m 755 bin/nyro $(NYRO_DIR)/bin/nyro
 	@install -m 644 conf/nyro.yaml $(NYRO_DIR)/conf/nyro.yaml
 	@install -m 644 conf/config.yaml $(NYRO_DIR)/conf/config.yaml
-	@cp $(ROUTER_LIB_DIR)/$(ROUTER_LIB) $(NYRO_DIR)/lib/
+	@cp $(ENGINE_LIB) $(NYRO_DIR)/lib/
 	@echo ""
-	@echo "✅ Installation complete!"
+	@echo "Installation complete!"
 	@echo ""
 	@echo "NYRO modules installed to: $(NYRO_DIR)/share/lua/5.1/"
 	@echo "NYRO dependencies installed to: $(NYRO_DIR)/lib/lua/5.1/"
-	@echo "Router engine installed to: $(NYRO_DIR)/lib/$(ROUTER_LIB)"
+	@echo "Engine library installed to: $(NYRO_DIR)/lib/$(ENGINE_LIB_NAME)"
 	@echo "Binary installed to: $(NYRO_DIR)/bin/nyro"
 	@echo "Configuration files installed to: $(NYRO_DIR)/conf/"
 	@echo ""
@@ -61,23 +66,22 @@ install:
 	@echo "  nyro start"
 
 .PHONY: dev
-dev:
-	@echo "Building nyro_router C library..."
-	cd $(ROUTER_LIB_DIR) && make
-	@echo "Installing nyro_router library for development..."
-	cd $(ROUTER_LIB_DIR) && make dev
+dev: engine
+	@echo "Installing engine library for development..."
+	@mkdir -p ./lua_modules/lib
+	@cp $(ENGINE_LIB) ./lua_modules/lib/
 	@echo "Installing NYRO for development..."
 	@echo "Using Lua/LuaJIT at: $(LUAJIT_DIR)"
 	luarocks make $(ROCKSPEC) --tree=./lua_modules $(LUAROCKS_FLAGS)
 	@echo ""
-	@echo "✅ Development installation complete!"
+	@echo "Development installation complete!"
 	@echo ""
 	@echo "You can now run NYRO directly:"
 	@echo "  ./bin/nyro version"
 	@echo "  ./bin/nyro start"
 	@echo ""
 	@echo "Note: The CLI automatically detects ./lua_modules/ and adds it to the search path."
-	@echo "      Router engine library is at: ./lua_modules/lib/$(ROUTER_LIB)"
+	@echo "      Engine library is at: ./lua_modules/lib/$(ENGINE_LIB_NAME)"
 
 .PHONY: uninstall
 uninstall:
@@ -86,13 +90,13 @@ uninstall:
 	@echo "Removing binary and configuration files..."
 	@$(REMOVE) $(NYRO_DIR)/bin/nyro
 	@$(REMOVE) $(NYRO_DIR)/conf
-	@$(REMOVE) $(NYRO_DIR)/lib/$(ROUTER_LIB)
+	@$(REMOVE) $(NYRO_DIR)/lib/$(ENGINE_LIB_NAME)
 	@echo "NYRO has been uninstalled."
 
 .PHONY: clean
 clean:
-	@echo "Cleaning nyro_router build files..."
-	cd $(ROUTER_LIB_DIR) && make clean
+	@echo "Cleaning engine build files..."
+	cd $(ENGINE_DIR) && cargo clean
 	@echo "Cleaning local development installation..."
 	$(REMOVE) ./lua_modules
 	@echo "Clean complete!"
@@ -101,8 +105,9 @@ clean:
 help:
 	@echo "NYRO Makefile targets:"
 	@echo ""
-	@echo "  make install     - Build C library and install NYRO to $(NYRO_DIR)"
-	@echo "  make dev         - Build C library and install for local development"
+	@echo "  make engine      - Build Rust engine library only"
+	@echo "  make install     - Build engine and install NYRO to $(NYRO_DIR)"
+	@echo "  make dev         - Build engine and install for local development"
 	@echo "  make uninstall   - Uninstall NYRO from $(NYRO_DIR)"
 	@echo "  make clean       - Clean all build files and local installation"
 	@echo "  make help        - Show this help message"
@@ -114,4 +119,3 @@ help:
 	@echo "  make install"
 	@echo "  make dev"
 	@echo "  make install NYRO_DIR=/opt/nyro"
-	@echo "  make install NYRO_DIR=/usr/local/openresty/site"

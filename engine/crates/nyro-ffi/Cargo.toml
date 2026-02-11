@@ -1,0 +1,13 @@
+[package]
+name = "nyro-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "NYRO native engine FFI exports (single cdylib)"
+
+[lib]
+name = "nyro"
+crate-type = ["cdylib"]
+
+[dependencies]
+nyro-router = { path = "../nyro-router" }
+nyro-llm = { path = "../nyro-llm" }

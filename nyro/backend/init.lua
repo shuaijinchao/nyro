@@ -10,7 +10,6 @@ local pairs    = pairs
 local type     = type
 local core      = require("nyro.core")
 local store    = require("nyro.store")
-local schema   = require("nyro.schema")
 local events   = require("resty.worker.events")
 local ngx_process        = require("ngx.process")
 local balancer           = require("ngx.balancer")
@@ -70,9 +69,10 @@ local function generate_backend_balancer(backend_data)
 
     local endpoints = backend_data.endpoints
     local endpoint_list = {}
+    local endpoint_details = {}  -- key -> 完整 endpoint 信息 (含 headers)
 
     if endpoints and #endpoints > 0 then
-        for _, endpoint in ipairs(endpoints) do
+        for idx, endpoint in ipairs(endpoints) do
             local addr = endpoint.address
             local port = endpoint.port
             
@@ -87,7 +87,15 @@ local function generate_backend_balancer(backend_data)
             
             if addr and port then
                 local weight = endpoint.weight or 1
-                endpoint_list[addr .. '|' .. port] = weight
+                -- 使用 idx 保证唯一性 (同 address:port 不同 headers 的场景)
+                local key = addr .. '|' .. port .. '|' .. idx
+                endpoint_list[key] = weight
+                endpoint_details[key] = {
+                    address = addr,
+                    port = tonumber(port),
+                    weight = weight,
+                    headers = endpoint.headers,  -- 节点级请求头 (如 API Key)
+                }
             end
         end
     end
@@ -101,10 +109,11 @@ local function generate_backend_balancer(backend_data)
 
     local timeout_config = backend_data.timeout or {}
     local backend_balancer = {
-        algorithm       = algorithm,
-        read_timeout    = timeout_config.read or core.const.UPSTREAM_DEFAULT_TIMEOUT,
-        write_timeout   = timeout_config.send or core.const.UPSTREAM_DEFAULT_TIMEOUT,
-        connect_timeout = timeout_config.connect or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+        algorithm        = algorithm,
+        read_timeout     = timeout_config.read or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+        write_timeout    = timeout_config.send or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+        connect_timeout  = timeout_config.connect or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+        endpoint_details = endpoint_details,  -- 保留完整 endpoint 信息
     }
 
     if algorithm == core.const.BALANCER_ROUNDROBIN then
@@ -284,144 +293,152 @@ local function resolve_host(host)
     return nil, "no A/AAAA record found"
 end
 
--- 检查并补充 backend 配置 (在 access 阶段调用)
-function _M.check_backend(oak_ctx)
+-- ============================================================
+-- prepare_upstream: 在 access 阶段完成节点选择 + DNS 解析 + headers 注入
+--
+-- 设计要点:
+--   1. endpoint 选择必须在 access 阶段, 因为 balancer 阶段无法调用
+--      ngx.req.set_header (注入 endpoint.headers)
+--   2. DNS 解析必须在 access 阶段, 因为 balancer 阶段无法使用 cosocket
+--   3. 结果存入 oak_ctx._upstream, balancer 阶段仅执行 set_current_peer
+-- ============================================================
+
+function _M.prepare_upstream(oak_ctx)
     if not oak_ctx.config or not oak_ctx.config.service_router or not oak_ctx.config.service_router.router then
         return
     end
 
-    local service_router = oak_ctx.config.service_router
-    local upstream = service_router.router.upstream
+    local sr = oak_ctx.config.service_router
+    local upstream = sr.router.upstream
 
-    -- 如果没有 upstream，尝试从 backend_name 获取
+    -- 补充 upstream: 如果 router_match 没设, 从 backend_name 获取
     if not upstream or not next(upstream) then
         if oak_ctx.config.backend_name and backend_objects[oak_ctx.config.backend_name] then
-            service_router.router.upstream = { id = oak_ctx.config.backend_name }
-        end
-        return
-    end
-
-    -- 如果已有 backend id 并且存在，直接返回
-    if upstream.id and backend_objects[upstream.id] then
-        return
-    end
-
-    -- URL 直接代理模式：如果有 address 但不是 IP，需要在此阶段 DNS 解析
-    -- (balancer 阶段不能使用 cosocket)
-    if upstream.address and not is_ip_address(upstream.address) then
-        local ip, err = resolve_host(upstream.address)
-        if ip then
-            upstream.resolved_ip = ip
-            ngx.log(ngx.INFO, "[sys.balancer] resolved ", upstream.address, " -> ", ip)
+            upstream = {
+                id = oak_ctx.config.backend_name,
+                scheme = oak_ctx.config.service and oak_ctx.config.service.scheme or "http",
+            }
+            sr.router.upstream = upstream
         else
-            ngx.log(ngx.ERR, "[sys.balancer] DNS resolve failed for ", upstream.address, ": ", err)
+            return
         end
     end
-end
 
--- 执行负载均衡
-function _M.gogogo(oak_ctx)
-    if not oak_ctx.config or not oak_ctx.config.service_router or not oak_ctx.config.service_router.router then
-        core.log.error("[sys.balancer] oak_ctx.config.service_router.router is null!")
-        return
-    end
-
-    local upstream = oak_ctx.config.service_router.router.upstream
-
-    if not upstream or not next(upstream) then
-        core.log.error("[sys.balancer] upstream is null!")
-        return
-    end
-
-    local address, port
-    local timeout = {
-        read_timeout    = core.const.UPSTREAM_DEFAULT_TIMEOUT,
-        write_timeout   = core.const.UPSTREAM_DEFAULT_TIMEOUT,
-        connect_timeout = core.const.UPSTREAM_DEFAULT_TIMEOUT,
-    }
+    -- 获取 service 级 timeout (backend timeout 优先)
+    local service = oak_ctx.config.service
+    local svc_timeout = service and service.timeout or {}
 
     if upstream.id then
+        -- ── Backend 负载均衡模式 ──────────────────────────────────────────
         local backend_obj = backend_objects[upstream.id]
-
         if not backend_obj then
             core.log.error("[sys.balancer] backend not found: ", upstream.id)
             return
         end
 
-        timeout.read_timeout = backend_obj.read_timeout
-        timeout.write_timeout = backend_obj.write_timeout
-        timeout.connect_timeout = backend_obj.connect_timeout
-
-        local address_port
-        if backend_obj.algorithm == core.const.BALANCER_ROUNDROBIN then
-            address_port = backend_obj.handler:find()
-        elseif backend_obj.algorithm == core.const.BALANCER_CHASH then
-            address_port = backend_obj.handler:find(oak_ctx.matched.host or "")
+        -- 选择节点
+        local key
+        if backend_obj.algorithm == core.const.BALANCER_CHASH then
+            key = backend_obj.handler:find(oak_ctx.matched.host or "")
         else
-            address_port = backend_obj.handler:find()
+            key = backend_obj.handler:find()
         end
 
-        if not address_port then
-            core.log.error("[sys.balancer] backend handler find null!")
-            return
-        end
-
-        local parts = core.string.split(address_port, "|")
-        if #parts ~= 2 then
-            core.log.error("[sys.balancer] address:port format error: ", address_port)
+        if not key then
+            core.log.error("[sys.balancer] no endpoint selected for backend: ", upstream.id)
             return
         end
 
-        address = parts[1]
-        port = tonumber(parts[2])
-    else
-        -- URL 直接代理模式
-        if not upstream.port then
-            core.log.error("[sys.balancer] upstream port undefined")
+        local detail = backend_obj.endpoint_details[key]
+        if not detail then
+            core.log.error("[sys.balancer] endpoint detail not found: ", key)
             return
         end
-        
-        -- 使用在 access 阶段解析的 IP
-        if upstream.resolved_ip then
-            address = upstream.resolved_ip
-        elseif upstream.address and is_ip_address(upstream.address) then
-            address = upstream.address
-        else
-            core.log.error("[sys.balancer] upstream address not resolved: ", upstream.address)
-            return
+
+        -- DNS 解析
+        local address = detail.address
+        if not is_ip_address(address) then
+            local ip, err = resolve_host(address)
+            if ip then
+                ngx.log(ngx.INFO, "[sys.balancer] resolved ", address, " -> ", ip)
+                address = ip
+            else
+                core.log.error("[sys.balancer] DNS resolve failed: ", detail.address, " ", err)
+                return
+            end
         end
-        
-        port = upstream.port
+
+        -- 注入 endpoint.headers (如 API Key 轮换)
+        if detail.headers and type(detail.headers) == "table" then
+            for k, v in pairs(detail.headers) do
+                ngx.req.set_header(k, v)
+            end
+        end
+
+        -- 存入 oak_ctx, 供 balancer 阶段使用
+        oak_ctx._upstream = {
+            address         = address,
+            port            = detail.port,
+            host            = detail.address,  -- 原始域名, 用于 Host 头
+            scheme          = upstream.scheme or "http",
+            connect_timeout = backend_obj.connect_timeout,
+            read_timeout    = backend_obj.read_timeout,
+            write_timeout   = backend_obj.write_timeout,
+        }
+
+    elseif upstream.address then
+        -- ── URL 直连模式 ─────────────────────────────────────────────────
+        local address = upstream.address
+        if not is_ip_address(address) then
+            local ip, err = resolve_host(address)
+            if ip then
+                ngx.log(ngx.INFO, "[sys.balancer] resolved ", address, " -> ", ip)
+                address = ip
+            else
+                core.log.error("[sys.balancer] DNS resolve failed: ", upstream.address, " ", err)
+                return
+            end
+        end
+
+        oak_ctx._upstream = {
+            address         = address,
+            port            = upstream.port,
+            host            = upstream.address,  -- 原始域名
+            scheme          = upstream.scheme or "http",
+            connect_timeout = svc_timeout.connect or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+            read_timeout    = svc_timeout.read or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+            write_timeout   = svc_timeout.send or core.const.UPSTREAM_DEFAULT_TIMEOUT,
+        }
     end
+end
 
-    if not address or not port then
-        core.log.error("[sys.balancer] address or port is null")
+-- 执行负载均衡 (balancer 阶段, 仅设置 peer + timeout)
+function _M.gogogo(oak_ctx)
+    local up = oak_ctx._upstream
+    if not up then
+        core.log.error("[sys.balancer] no upstream prepared (call prepare_upstream first)")
         return
     end
 
-    -- 验证端口
-    local _, err2 = core.schema.check(schema.upstream_node.schema_port, port)
-    if err2 then
-        core.log.error("[sys.balancer] port check error: ", port, " ", err2)
+    if not up.address or not up.port then
+        core.log.error("[sys.balancer] upstream address or port is null")
         return
     end
 
     -- 设置超时
     local ok, timeout_err = balancer.set_timeouts(
-        timeout.connect_timeout / 1000, 
-        timeout.write_timeout / 1000, 
-        timeout.read_timeout / 1000
+        (up.connect_timeout or core.const.UPSTREAM_DEFAULT_TIMEOUT) / 1000,
+        (up.write_timeout or core.const.UPSTREAM_DEFAULT_TIMEOUT) / 1000,
+        (up.read_timeout or core.const.UPSTREAM_DEFAULT_TIMEOUT) / 1000
     )
     if not ok then
         core.log.error("[sys.balancer] set timeouts error: ", timeout_err)
-        return
     end
 
-    -- 设置目标
-    local ok2, peer_err = balancer.set_current_peer(address, port)
+    -- 设置目标节点
+    local ok2, peer_err = balancer.set_current_peer(up.address, up.port)
     if not ok2 then
         core.log.error("[sys.balancer] set peer error: ", peer_err)
-        return
     end
 end
 

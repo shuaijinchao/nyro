@@ -55,6 +55,10 @@ build = {
         ["nyro.core.utils.tablepool"] = "nyro/core/utils/tablepool.lua",
         ["nyro.core.utils.time"] = "nyro/core/utils/time.lua",
 
+        -- FFI modules
+        ["nyro.ffi"] = "nyro/ffi/init.lua",
+        ["nyro.ffi.llm"] = "nyro/ffi/llm.lua",
+
         -- Route modules (routes resource)
         ["nyro.route"] = "nyro/route/init.lua",
         ["nyro.route.matcher"] = "nyro/route/matcher.lua",
@@ -89,6 +93,8 @@ build = {
         ["nyro.plugin.limit-req.schema"] = "nyro/plugin/limit-req/schema.lua",
         ["nyro.plugin.mock.handler"] = "nyro/plugin/mock/handler.lua",
         ["nyro.plugin.mock.schema"] = "nyro/plugin/mock/schema.lua",
+        ["nyro.plugin.ai-proxy.handler"] = "nyro/plugin/ai-proxy/handler.lua",
+        ["nyro.plugin.ai-proxy.schema"] = "nyro/plugin/ai-proxy/schema.lua",
 
         -- Schema modules
         ["nyro.schema"] = "nyro/schema/init.lua",

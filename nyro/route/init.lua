@@ -115,6 +115,7 @@ local function build_router(data)
     for _, route in ipairs(routes) do
         local paths = route.paths or {}
         local methods = route.methods or {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+        local hosts = route.hosts  -- 域名数组, nil 表示匹配所有
 
         -- 获取关联的服务
         local service = nil
@@ -137,25 +138,38 @@ local function build_router(data)
         -- 获取匹配类型
         local match_type = route.match_type
 
-        for _, path in ipairs(paths) do
-            local ok, add_err = r:add({
-                path = path,
-                methods = methods,
-                match_type = match_type,
-                priority = route.priority or 0,
-                handler = {
-                    route = route,
-                    service = service,
-                    backend_name = backend_name,
-                    upstream_url = upstream_url,
-                    plugins = route.plugins or {},
-                },
-            })
+        -- 构建 handler (存储完整 service 对象, 供 ai-proxy 等插件读取 provider)
+        local handler = {
+            route = route,
+            service = service,
+            backend_name = backend_name,
+            upstream_url = upstream_url,
+            plugins = route.plugins or {},
+        }
 
-            if ok then
-                added_count = added_count + 1
-            else
-                ngx.log(ngx.WARN, "[sys.router] failed to add route: ", route.name, " path: ", path, " err: ", add_err)
+        -- hosts 为空时用 {"*"} 匹配所有域名
+        local host_list = hosts
+        if not host_list or #host_list == 0 then
+            host_list = {"*"}
+        end
+
+        for _, host in ipairs(host_list) do
+            for _, path in ipairs(paths) do
+                local ok, add_err = r:add({
+                    host = host,
+                    path = path,
+                    methods = methods,
+                    match_type = match_type,
+                    priority = route.priority or 0,
+                    handler = handler,
+                })
+
+                if ok then
+                    added_count = added_count + 1
+                else
+                    ngx.log(ngx.WARN, "[sys.router] failed to add route: ", route.name,
+                            " host: ", host, " path: ", path, " err: ", add_err)
+                end
             end
         end
     end
@@ -345,7 +359,11 @@ function _M.router_match(oak_ctx)
     -- 构建 service_router 结构 (用于 balancer)
     local upstream = nil
     if handler.backend_name then
-        upstream = { id = handler.backend_name }
+        upstream = {
+            id = handler.backend_name,
+            -- backend 模式: scheme 从 service.scheme 获取 (默认 http)
+            scheme = handler.service and handler.service.scheme or "http",
+        }
     elseif handler.upstream_url then
         upstream = {
             address = handler.upstream_url.host,

@@ -1,11 +1,11 @@
 --
 -- NYRO Router FFI Bindings
 -- 
--- LuaJIT FFI 绑定，加载 libnyro_router 动态库
+-- LuaJIT FFI 绑定，通过统一 FFI 基础模块加载 libnyro
 --
 
 local ffi = require("ffi")
-local C = ffi.C
+local base_ffi = require("nyro.ffi")
 
 local _M = {
     _VERSION = "0.1.0"
@@ -66,7 +66,6 @@ ffi.cdef[[
 _M.MATCH_EXACT  = 1
 _M.MATCH_PREFIX = 2
 _M.MATCH_PARAM  = 3
-_M.MATCH_REGEX  = 4
 
 -- 错误码
 _M.OK          = 0
@@ -99,77 +98,13 @@ _M.METHOD_MAP = {
     TRACE   = _M.METHOD_TRACE,
 }
 
--- 加载动态库
-local lib = nil
-local lib_loaded = false
-local lib_error = nil
-
--- 获取当前脚本所在目录
-local function get_script_dir()
-    local info = debug.getinfo(1, "S")
-    local path = info.source:match("^@(.*/)")
-    return path or "./"
-end
-
--- 获取项目根目录 (从 nyro/route/ 向上两级)
-local function get_project_root()
-    local script_dir = get_script_dir()
-    -- 从 nyro/route/ 回到项目根目录
-    local root = script_dir:match("^(.*/)[^/]+/[^/]+/[^/]+/$")
-    return root or "./"
-end
-
-local function get_lib_paths()
-    local root = get_project_root()
-    local os_name = jit and jit.os or "Linux"
-    local ext = (os_name == "OSX") and ".dylib" or ".so"
-    
-    -- 尝试多个可能的路径
-    local paths = {
-        -- 开发模式 (相对于项目根目录)
-        root .. "lua_modules/lib/libnyro_router" .. ext,
-        root .. "deps/nyro/libnyro_router" .. ext,
-        -- 当前工作目录
-        "./lua_modules/lib/libnyro_router" .. ext,
-        "./deps/nyro/libnyro_router" .. ext,
-        -- 安装模式
-        "/usr/local/nyro/lib/libnyro_router" .. ext,
-        "/usr/local/lib/libnyro_router" .. ext,
-    }
-    return paths
-end
-
+-- 库访问 (委托给统一 FFI 基础模块)
 function _M.load()
-    if lib_loaded then
-        return lib, nil
-    end
-
-    local paths = get_lib_paths()
-    local errors = {}
-
-    for _, path in ipairs(paths) do
-        local ok, result = pcall(ffi.load, path)
-        if ok then
-            lib = result
-            lib_loaded = true
-            return lib, nil
-        else
-            table.insert(errors, string.format("  %s: %s", path, tostring(result)))
-        end
-    end
-
-    lib_error = "Failed to load libnyro_router:\n" .. table.concat(errors, "\n")
-    return nil, lib_error
+    return base_ffi.load()
 end
 
 function _M.get_lib()
-    if not lib_loaded then
-        local _, err = _M.load()
-        if err then
-            return nil, err
-        end
-    end
-    return lib, nil
+    return base_ffi.get_lib()
 end
 
 -- 将 HTTP 方法字符串转换为位掩码
