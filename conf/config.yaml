@@ -1,17 +1,62 @@
 #
-# NYRO 声明式配置文件 (DB Less 模式)
+# NYRO declarative config (DB-less mode)
 #
-# 最简配置示例：使用 URL 直接代理
+# Plugin enablement is managed in nyro.yaml; only resources are defined here.
+# Full scenario docs: docs/zh_CN/examples/
 #
 
 version: "1.0"
 
+consumers:
+  - name: ai-app
+    credentials:
+      key-auth:
+        key: "sk-6b5aadb8608548269e675473874b5143"
+
 services:
+  # ── API Gateway ──
   - name: httpbin
     url: http://httpbin.org
 
+  # ── AI Gateway ──
+  - name: openai
+    provider: openai
+    url: https://api.deepseek.com
+
 routes:
+  # ── API Gateway ──
   - name: proxy
     service: httpbin
     paths:
       - /*
+
+  # ── AI: OpenAI SDK → OpenAI backend (passthrough) ──
+  - name: chat-openai
+    service: openai
+    paths:
+      - /v1/chat/completions
+    methods: ["POST"]
+    plugins:
+      - id: key-auth
+      - id: ai-proxy
+
+  # ── AI: Anthropic SDK → OpenAI backend (protocol conversion) ──
+  - name: chat-anthropic-to-openai
+    service: openai
+    paths:
+      - /v1/messages
+    methods: ["POST"]
+    plugins:
+      - id: key-auth
+      - id: ai-proxy
+
+  # ── AI: Gemini SDK → OpenAI backend (protocol conversion) ──
+  # Gemini SDK sends: POST /v1beta/models/{model}:{action}
+  - name: chat-gemini-to-openai
+    service: openai
+    paths:
+      - /v1beta/models/*
+    methods: ["POST"]
+    plugins:
+      - id: key-auth
+      - id: ai-proxy

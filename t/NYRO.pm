@@ -50,7 +50,7 @@ _EOC_
     set_real_ip_from 127.0.0.1;
     set_real_ip_from unix:;
 
-    more_set_headers 'Server: NYRO API Gateway';
+    more_set_headers 'Server: Nyro Gateway';
 
     lua_shared_dict nyro 100m;
     lua_shared_dict plugin_limit_conn  10m;

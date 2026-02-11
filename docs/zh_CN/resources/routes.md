@@ -29,7 +29,6 @@
 | 精确匹配 | 普通路径 | `/api/v1/users` |
 | 前缀匹配 | 以 `/*` 结尾 | `/api/v1/articles/*` |
 | 参数匹配 | 包含 `{param}` | `/api/v1/users/{id}` |
-| 正则匹配 | 以 `~` 开头 | `~^/api/v[0-9]+/.*` |
 
 ### 手动指定 match_type
 
@@ -40,7 +39,6 @@
 | `exact` | 精确匹配 |
 | `prefix` | 前缀匹配 |
 | `param` | 参数匹配 |
-| `regex` | 正则匹配 |
 
 ```yaml
 routes:
@@ -57,13 +55,6 @@ routes:
     paths:
       - /api/v1
     match_type: prefix
-
-  # 强制正则匹配
-  - name: regex-api
-    service: api-service
-    paths:
-      - /api/v[0-9]+/products
-    match_type: regex
 ```
 
 ## 使用示例
@@ -97,16 +88,6 @@ routes:
     paths:
       - /api/v1/users/{id}
       - /api/v1/users/{id}/profile
-```
-
-### 正则匹配
-
-```yaml
-routes:
-  - name: version-api
-    service: api-service
-    paths:
-      - ~^/api/v[0-9]+/products
 ```
 
 ### 完整配置

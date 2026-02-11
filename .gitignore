@@ -42,6 +42,9 @@ luac.out
 *.DS_Store
 .vscode
 
+# Rust build output
+engine/target/
+
 # LuaRocks installation directories
 lua_modules
 share

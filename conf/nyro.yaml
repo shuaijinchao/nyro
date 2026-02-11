@@ -89,7 +89,7 @@ plugins:
   - limit-req
   - limit-conn
   - limit-count
-  # - ai-proxy  # AI Proxy 插件 (未来支持)
+  - ai-proxy
 
 # ============================================================
 # 日志配置

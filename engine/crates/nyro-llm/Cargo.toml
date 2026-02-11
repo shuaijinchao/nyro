@@ -1,0 +1,8 @@
+[package]
+name = "nyro-llm"
+version = "0.1.0"
+edition = "2021"
+description = "NYRO LLM protocol conversion layer, wrapping llm-converter"
+
+[dependencies]
+llm-converter = "0.5"
