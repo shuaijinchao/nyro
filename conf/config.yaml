@@ -11,7 +11,7 @@ consumers:
   - name: ai-app
     credentials:
       key-auth:
-        key: "sk-6b5aadb8608548269e675473874b5143"
+        key: "sk-xxxxx"
 
 services:
   # ── API Gateway ──
