@@ -6,11 +6,11 @@ async function invokeIPC<T>(cmd: string, args?: Record<string, unknown>): Promis
 }
 
 async function invokeHTTP<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const method = args ? "POST" : "GET";
-  const resp = await fetch(`/api/v1/${cmd}`, {
-    method,
+  const mapping = resolveHTTP(cmd, args);
+  const resp = await fetch(mapping.url, {
+    method: mapping.method,
     headers: { "Content-Type": "application/json" },
-    body: args ? JSON.stringify(args) : undefined,
+    body: mapping.body ? JSON.stringify(mapping.body) : undefined,
   });
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
@@ -18,6 +18,71 @@ async function invokeHTTP<T>(cmd: string, args?: Record<string, unknown>): Promi
   }
   const json = await resp.json();
   return json.data ?? json;
+}
+
+interface HTTPMapping {
+  method: string;
+  url: string;
+  body?: Record<string, unknown>;
+}
+
+function resolveHTTP(cmd: string, args?: Record<string, unknown>): HTTPMapping {
+  const base = "/api/v1";
+  switch (cmd) {
+    case "get_providers":
+      return { method: "GET", url: `${base}/providers` };
+    case "get_provider":
+      return { method: "GET", url: `${base}/providers/${args?.id}` };
+    case "create_provider":
+      return { method: "POST", url: `${base}/providers`, body: args?.input as Record<string, unknown> };
+    case "update_provider":
+      return { method: "PUT", url: `${base}/providers/${args?.id}`, body: args?.input as Record<string, unknown> };
+    case "delete_provider":
+      return { method: "DELETE", url: `${base}/providers/${args?.id}` };
+    case "test_provider":
+      return { method: "GET", url: `${base}/providers/${args?.id}/test` };
+
+    case "list_routes":
+      return { method: "GET", url: `${base}/routes` };
+    case "create_route":
+      return { method: "POST", url: `${base}/routes`, body: args?.input as Record<string, unknown> };
+    case "update_route":
+      return { method: "PUT", url: `${base}/routes/${args?.id}`, body: args?.input as Record<string, unknown> };
+    case "delete_route":
+      return { method: "DELETE", url: `${base}/routes/${args?.id}` };
+
+    case "query_logs": {
+      const q = (args?.query ?? {}) as Record<string, unknown>;
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(q)) {
+        if (v != null) params.set(k, String(v));
+      }
+      const qs = params.toString();
+      return { method: "GET", url: `${base}/logs${qs ? "?" + qs : ""}` };
+    }
+
+    case "get_stats_overview":
+      return { method: "GET", url: `${base}/stats/overview` };
+    case "get_stats_hourly": {
+      const hours = args?.hours ?? 24;
+      return { method: "GET", url: `${base}/stats/hourly?hours=${hours}` };
+    }
+    case "get_stats_by_model":
+      return { method: "GET", url: `${base}/stats/models` };
+    case "get_stats_by_provider":
+      return { method: "GET", url: `${base}/stats/providers` };
+
+    case "get_setting":
+      return { method: "GET", url: `${base}/settings/${args?.key}` };
+    case "set_setting":
+      return { method: "PUT", url: `${base}/settings/${args?.key}`, body: { value: args?.value } };
+
+    case "get_gateway_status":
+      return { method: "GET", url: `${base}/status` };
+
+    default:
+      return { method: "POST", url: `${base}/${cmd}`, body: args };
+  }
 }
 
 export const backend = IS_TAURI ? invokeIPC : invokeHTTP;

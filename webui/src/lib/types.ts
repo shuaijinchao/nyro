@@ -39,6 +39,11 @@ export interface RequestLog {
   error_message?: string;
 }
 
+export interface LogPage {
+  items: RequestLog[];
+  total: number;
+}
+
 export interface GatewayStatus {
   status: string;
   proxy_port: number;
@@ -46,9 +51,41 @@ export interface GatewayStatus {
 
 export interface StatsOverview {
   total_requests: number;
-  total_tokens: number;
-  avg_latency_ms: number;
-  error_rate: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  avg_duration_ms: number;
+  error_count: number;
+}
+
+export interface StatsHourly {
+  hour: string;
+  request_count: number;
+  error_count: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  avg_duration_ms: number;
+}
+
+export interface ModelStats {
+  model: string;
+  request_count: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  avg_duration_ms: number;
+}
+
+export interface ProviderStats {
+  provider: string;
+  request_count: number;
+  error_count: number;
+  avg_duration_ms: number;
+}
+
+export interface TestResult {
+  success: boolean;
+  latency_ms: number;
+  model?: string;
+  error?: string;
 }
 
 export interface CreateProvider {
@@ -58,6 +95,15 @@ export interface CreateProvider {
   api_key: string;
 }
 
+export interface UpdateProvider {
+  name?: string;
+  protocol?: string;
+  base_url?: string;
+  api_key?: string;
+  is_active?: boolean;
+  priority?: number;
+}
+
 export interface CreateRoute {
   name: string;
   match_pattern: string;
@@ -65,4 +111,13 @@ export interface CreateRoute {
   target_model: string;
   fallback_provider?: string;
   fallback_model?: string;
+}
+
+export interface LogQuery {
+  limit?: number;
+  offset?: number;
+  provider?: string;
+  model?: string;
+  status_min?: number;
+  status_max?: number;
 }

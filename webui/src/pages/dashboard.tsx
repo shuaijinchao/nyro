@@ -1,173 +1,193 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { Header } from "@/components/layout/header";
-import { api } from "@/lib/api";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Line, LineChart } from "recharts";
+import { backend } from "@/lib/backend";
+import type { StatsOverview, StatsHourly, ModelStats, ProviderStats, GatewayStatus, Provider, Route as RouteType } from "@/lib/types";
+import { Activity, Zap, Clock, AlertTriangle, Server, Route } from "lucide-react";
 
-function formatNum(value: number) {
-  return new Intl.NumberFormat("zh-CN").format(value);
-}
-
-function formatUptime(seconds: number) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
+function fmt(n: number) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return String(n);
 }
 
 export default function DashboardPage() {
-  const statusQuery = useQuery({
-    queryKey: ["status"],
-    queryFn: api.getStatus,
-    refetchInterval: 5000,
+  const { data: overview } = useQuery<StatsOverview>({
+    queryKey: ["stats-overview"],
+    queryFn: () => backend("get_stats_overview"),
+    refetchInterval: 10_000,
   });
 
-  const metricsQuery = useQuery({
-    queryKey: ["metrics"],
-    queryFn: api.getMetrics,
-    refetchInterval: 5000,
+  const { data: hourly = [] } = useQuery<StatsHourly[]>({
+    queryKey: ["stats-hourly"],
+    queryFn: () => backend("get_stats_hourly", { hours: 24 }),
+    refetchInterval: 30_000,
   });
 
-  const loading = statusQuery.isLoading || metricsQuery.isLoading;
-  const status = statusQuery.data?.data;
-  const metrics = metricsQuery.data;
+  const { data: modelStats = [] } = useQuery<ModelStats[]>({
+    queryKey: ["stats-models"],
+    queryFn: () => backend("get_stats_by_model"),
+    refetchInterval: 30_000,
+  });
 
-  const statusChart = useMemo(() => {
-    if (!metrics) {
-      return [
-        { name: "2xx", value: 0 },
-        { name: "4xx", value: 0 },
-        { name: "5xx", value: 0 },
-      ];
-    }
-    const agg = { "2xx": 0, "4xx": 0, "5xx": 0 };
-    for (const item of metrics.routes) {
-      agg["2xx"] += item.status["2xx"] || 0;
-      agg["4xx"] += item.status["4xx"] || 0;
-      agg["5xx"] += item.status["5xx"] || 0;
-    }
-    return [
-      { name: "2xx", value: agg["2xx"] },
-      { name: "4xx", value: agg["4xx"] },
-      { name: "5xx", value: agg["5xx"] },
-    ];
-  }, [metrics]);
+  const { data: providerStats = [] } = useQuery<ProviderStats[]>({
+    queryKey: ["stats-providers"],
+    queryFn: () => backend("get_stats_by_provider"),
+    refetchInterval: 30_000,
+  });
 
-  const topModels = useMemo(() => {
-    if (!metrics) return [];
-    return [...metrics.models].sort((a, b) => b.requests - a.requests).slice(0, 6);
-  }, [metrics]);
+  const { data: status } = useQuery<GatewayStatus>({
+    queryKey: ["gateway-status"],
+    queryFn: () => backend("get_gateway_status"),
+  });
 
-  const refreshAll = () => {
-    void statusQuery.refetch();
-    void metricsQuery.refetch();
-  };
+  const { data: providers = [] } = useQuery<Provider[]>({
+    queryKey: ["providers"],
+    queryFn: () => backend("get_providers"),
+  });
+
+  const { data: routes = [] } = useQuery<RouteType[]>({
+    queryKey: ["routes"],
+    queryFn: () => backend("list_routes"),
+  });
+
+  const errorRate = overview && overview.total_requests > 0
+    ? ((overview.error_count / overview.total_requests) * 100).toFixed(1)
+    : "0";
+
+  const cards = [
+    { label: "Total Requests", value: fmt(overview?.total_requests ?? 0), icon: Activity, color: "text-blue-600" },
+    { label: "Total Tokens", value: fmt((overview?.total_input_tokens ?? 0) + (overview?.total_output_tokens ?? 0)), icon: Zap, color: "text-amber-600" },
+    { label: "Avg Latency", value: `${(overview?.avg_duration_ms ?? 0).toFixed(0)}ms`, icon: Clock, color: "text-green-600" },
+    { label: "Error Rate", value: `${errorRate}%`, icon: AlertTriangle, color: "text-red-500" },
+    { label: "Providers", value: String(providers.length), icon: Server, color: "text-purple-600" },
+    { label: "Routes", value: String(routes.length), icon: Route, color: "text-indigo-600" },
+  ];
+
+  const chartHourly = hourly.map((h) => ({
+    hour: h.hour.slice(11, 16),
+    requests: h.request_count,
+    errors: h.error_count,
+    latency: Math.round(h.avg_duration_ms),
+  }));
 
   return (
     <div className="space-y-5">
-      <Header
-        title="Dashboard"
-        subtitle="Professional AI/API Gateway Console"
-        onRefresh={refreshAll}
-        isRefreshing={statusQuery.isFetching || metricsQuery.isFetching}
-      />
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Proxy {status?.status === "running" ? "running" : "–"} on port {status?.proxy_port ?? "–"}
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          {
-            label: "Total Requests",
-            value: metrics ? formatNum(metrics.total_requests) : "—",
-          },
-          {
-            label: "Active Connections",
-            value: metrics ? formatNum(metrics.active_connections) : "—",
-          },
-          {
-            label: "Input Tokens",
-            value: metrics ? formatNum(metrics.total_input_tokens) : "—",
-          },
-          {
-            label: "Output Tokens",
-            value: metrics ? formatNum(metrics.total_output_tokens) : "—",
-          },
-          {
-            label: "Config Version",
-            value: status ? String(status.config_version) : "—",
-          },
-          {
-            label: "Store Mode",
-            value: status?.store_mode || "—",
-          },
-          {
-            label: "Workers",
-            value: status ? String(status.worker_count) : "—",
-          },
-          {
-            label: "Uptime",
-            value: status ? formatUptime(status.uptime_seconds) : "—",
-          },
-        ].map((card) => (
-          <div
-            key={card.label}
-            className="glass rounded-2xl p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl cursor-pointer"
-          >
-            <p className="text-sm font-medium text-slate-500">
-              {card.label}
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">
-              {card.value}
-            </p>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        {cards.map((c) => (
+          <div key={c.label} className="glass rounded-2xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg">
+            <div className="flex items-center gap-2">
+              <c.icon className={`h-4 w-4 ${c.color}`} />
+              <p className="text-xs font-medium text-slate-500">{c.label}</p>
+            </div>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{c.value}</p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="glass rounded-2xl p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Status Distribution</h3>
-            {loading && <span className="text-xs text-slate-500">Loading...</span>}
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={statusChart}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#dbe4f0" />
-                <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#1e40af" />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="mb-4 text-sm font-semibold text-slate-800">Requests (24h)</h3>
+          <div className="h-56">
+            {chartHourly.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartHourly}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="hour" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip />
+                  <Bar dataKey="requests" name="Requests" radius={[4, 4, 0, 0]} fill="#3b82f6" />
+                  <Bar dataKey="errors" name="Errors" radius={[4, 4, 0, 0]} fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                No traffic data yet
+              </div>
+            )}
           </div>
         </div>
 
         <div className="glass rounded-2xl p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Top Models</h3>
-            <span className="text-xs text-slate-500">{topModels.length} models</span>
+          <h3 className="mb-4 text-sm font-semibold text-slate-800">Latency (24h)</h3>
+          <div className="h-56">
+            {chartHourly.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartHourly}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="hour" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} width={40} unit="ms" />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="latency" name="Avg Latency" stroke="#10b981" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                No latency data yet
+              </div>
+            )}
           </div>
+        </div>
+      </div>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="glass rounded-2xl p-6">
+          <h3 className="mb-4 text-sm font-semibold text-slate-800">Top Models</h3>
           <div className="overflow-hidden rounded-xl border border-white/70 bg-white/50">
             <table className="w-full text-sm">
               <thead className="bg-white/70 text-slate-500">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Model</th>
-                  <th className="px-3 py-2 text-right font-medium">Req</th>
-                  <th className="px-3 py-2 text-right font-medium">Input</th>
-                  <th className="px-3 py-2 text-right font-medium">Output</th>
+                  <th className="px-3 py-2 text-right font-medium">Requests</th>
+                  <th className="px-3 py-2 text-right font-medium">Tokens</th>
+                  <th className="px-3 py-2 text-right font-medium">Latency</th>
                 </tr>
               </thead>
               <tbody>
-                {topModels.length === 0 && (
-                  <tr>
-                    <td className="px-3 py-6 text-center text-slate-500" colSpan={4}>
-                      暂无 AI 模型数据
-                    </td>
-                  </tr>
+                {modelStats.length === 0 && (
+                  <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={4}>No model data</td></tr>
                 )}
-                {topModels.map((m) => (
-                  <tr key={m.name} className="border-t border-white/70 text-slate-700">
-                    <td className="px-3 py-2 font-medium">{m.name}</td>
-                    <td className="px-3 py-2 text-right">{formatNum(m.requests)}</td>
-                    <td className="px-3 py-2 text-right">{formatNum(m.input_tokens)}</td>
-                    <td className="px-3 py-2 text-right">{formatNum(m.output_tokens)}</td>
+                {modelStats.slice(0, 8).map((m) => (
+                  <tr key={m.model} className="border-t border-white/70 text-slate-700">
+                    <td className="px-3 py-2 font-medium">{m.model}</td>
+                    <td className="px-3 py-2 text-right">{fmt(m.request_count)}</td>
+                    <td className="px-3 py-2 text-right">{fmt(m.total_input_tokens + m.total_output_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{m.avg_duration_ms.toFixed(0)}ms</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl p-6">
+          <h3 className="mb-4 text-sm font-semibold text-slate-800">Provider Overview</h3>
+          <div className="overflow-hidden rounded-xl border border-white/70 bg-white/50">
+            <table className="w-full text-sm">
+              <thead className="bg-white/70 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Provider</th>
+                  <th className="px-3 py-2 text-right font-medium">Requests</th>
+                  <th className="px-3 py-2 text-right font-medium">Errors</th>
+                  <th className="px-3 py-2 text-right font-medium">Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {providerStats.length === 0 && (
+                  <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={4}>No provider data</td></tr>
+                )}
+                {providerStats.map((p) => (
+                  <tr key={p.provider} className="border-t border-white/70 text-slate-700">
+                    <td className="px-3 py-2 font-medium">{p.provider}</td>
+                    <td className="px-3 py-2 text-right">{fmt(p.request_count)}</td>
+                    <td className="px-3 py-2 text-right text-red-500">{p.error_count}</td>
+                    <td className="px-3 py-2 text-right">{p.avg_duration_ms.toFixed(0)}ms</td>
                   </tr>
                 ))}
               </tbody>

@@ -43,11 +43,22 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_providers,
+            commands::get_provider,
             commands::create_provider,
+            commands::update_provider,
             commands::delete_provider,
+            commands::test_provider,
             commands::list_routes,
             commands::create_route,
+            commands::update_route,
             commands::delete_route,
+            commands::query_logs,
+            commands::get_stats_overview,
+            commands::get_stats_hourly,
+            commands::get_stats_by_model,
+            commands::get_stats_by_provider,
+            commands::get_setting,
+            commands::set_setting,
             commands::get_gateway_status,
         ])
         .run(tauri::generate_context!())

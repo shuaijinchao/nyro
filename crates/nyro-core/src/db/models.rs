@@ -68,6 +68,18 @@ pub struct UpdateProvider {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateRoute {
+    pub name: Option<String>,
+    pub match_pattern: Option<String>,
+    pub target_provider: Option<String>,
+    pub target_model: Option<String>,
+    pub fallback_provider: Option<String>,
+    pub fallback_model: Option<String>,
+    pub is_active: Option<bool>,
+    pub priority: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateRoute {
     pub name: String,
     pub match_pattern: String,
@@ -75,4 +87,64 @@ pub struct CreateRoute {
     pub target_model: String,
     pub fallback_provider: Option<String>,
     pub fallback_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LogQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub status_min: Option<i32>,
+    pub status_max: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogPage {
+    pub items: Vec<RequestLog>,
+    pub total: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, FromRow)]
+pub struct StatsOverview {
+    pub total_requests: i64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub avg_duration_ms: f64,
+    pub error_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct StatsHourly {
+    pub hour: String,
+    pub request_count: i64,
+    pub error_count: i64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub avg_duration_ms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ModelStats {
+    pub model: String,
+    pub request_count: i64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub avg_duration_ms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ProviderStats {
+    pub provider: String,
+    pub request_count: i64,
+    pub error_count: i64,
+    pub avg_duration_ms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestResult {
+    pub success: bool,
+    pub latency_ms: u64,
+    pub model: Option<String>,
+    pub error: Option<String>,
 }
