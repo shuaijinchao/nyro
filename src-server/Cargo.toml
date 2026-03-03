@@ -1,0 +1,19 @@
+[package]
+name = "nyro-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Nyro AI Gateway — Standalone Server Binary"
+
+[dependencies]
+nyro-core = { path = "../crates/nyro-core" }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+shellexpand = "3"
+anyhow = { workspace = true }

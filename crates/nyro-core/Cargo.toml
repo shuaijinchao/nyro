@@ -1,0 +1,30 @@
+[package]
+name = "nyro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core library for Nyro AI Gateway — protocol conversion, proxy, admin API"
+
+[dependencies]
+tokio = { workspace = true }
+axum = { workspace = true }
+reqwest = { workspace = true }
+tower-http = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+eventsource-stream = "0.2"
+async-stream = "0.3"
+tokio-stream = "0.1"
+futures = "0.3"
+bytes = "1"
+glob-match = "0.2"
+dirs = "6"
+aes-gcm = "0.10"
+keyring = "3"

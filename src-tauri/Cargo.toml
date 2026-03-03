@@ -1,0 +1,24 @@
+[package]
+name = "nyro-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Nyro AI Gateway — Desktop Application"
+
+[dependencies]
+nyro-core = { path = "../crates/nyro-core" }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lib]
+name = "nyro_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]

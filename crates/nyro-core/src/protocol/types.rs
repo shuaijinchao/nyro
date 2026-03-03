@@ -1,0 +1,74 @@
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::Protocol;
+
+#[derive(Debug, Clone)]
+pub struct InternalRequest {
+    pub messages: Vec<InternalMessage>,
+    pub model: String,
+    pub stream: bool,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub top_p: Option<f64>,
+    pub tools: Option<Vec<Value>>,
+    pub tool_choice: Option<Value>,
+    pub source_protocol: Protocol,
+    pub extra: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InternalMessage {
+    pub role: Role,
+    pub content: MessageContent,
+    pub tool_calls: Option<Vec<Value>>,
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    System,
+    User,
+    Assistant,
+    Tool,
+}
+
+#[derive(Debug, Clone)]
+pub enum MessageContent {
+    Text(String),
+    Blocks(Vec<ContentBlock>),
+}
+
+#[derive(Debug, Clone)]
+pub enum ContentBlock {
+    Text {
+        text: String,
+    },
+    Image {
+        source: ImageSource,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        content: Value,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageSource {
+    pub media_type: String,
+    pub data: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TokenUsage {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+}

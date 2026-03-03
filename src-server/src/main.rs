@@ -1,0 +1,69 @@
+use std::path::PathBuf;
+
+use clap::Parser;
+use nyro_core::{Gateway, config::GatewayConfig, logging};
+
+mod admin_routes;
+
+#[derive(Parser)]
+#[command(name = "nyro-server", about = "Nyro AI Gateway — Server Mode")]
+struct Args {
+    #[arg(long, default_value = "18080")]
+    proxy_port: u16,
+
+    #[arg(long, default_value = "18081")]
+    admin_port: u16,
+
+    #[arg(long, default_value = "~/.nyro")]
+    data_dir: String,
+
+    #[arg(long, help = "Bearer token for admin API authentication")]
+    admin_key: Option<String>,
+
+    #[arg(long, default_value = "./webui/dist", help = "Path to webui static files")]
+    webui_dir: String,
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter("nyro=debug,tower_http=debug")
+        .init();
+
+    let args = Args::parse();
+
+    let data_dir = shellexpand::tilde(&args.data_dir).to_string();
+    let config = GatewayConfig {
+        proxy_port: args.proxy_port,
+        data_dir: PathBuf::from(data_dir),
+        ..Default::default()
+    };
+
+    let (gateway, log_rx) = Gateway::new(config).await?;
+
+    let gw_proxy = gateway.clone();
+    let db_for_logs = gateway.db.clone();
+
+    tokio::spawn(async move {
+        if let Err(e) = gw_proxy.start_proxy().await {
+            tracing::error!("proxy server error: {e}");
+        }
+    });
+
+    tokio::spawn(async move {
+        logging::run_collector(log_rx, db_for_logs).await;
+    });
+
+    let admin_router = admin_routes::create_router(gateway, args.admin_key);
+    let webui_service = tower_http::services::ServeDir::new(&args.webui_dir);
+    let app = admin_router.fallback_service(webui_service);
+
+    let admin_addr = format!("0.0.0.0:{}", args.admin_port);
+    let listener = tokio::net::TcpListener::bind(&admin_addr).await?;
+
+    tracing::info!("proxy  → http://127.0.0.1:{}", args.proxy_port);
+    tracing::info!("webui  → http://127.0.0.1:{}", args.admin_port);
+
+    axum::serve(listener, app).await?;
+    Ok(())
+}

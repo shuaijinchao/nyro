@@ -4,29 +4,24 @@ import {
   LayoutDashboard,
   Route,
   Server,
-  HardDrive,
-  Users,
-  Puzzle,
-  ShieldCheck,
   ScrollText,
   BarChart3,
   ChevronLeft,
   Bot,
   Sparkles,
+  Settings,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard },
+  { label: "Providers", path: "/providers", icon: Server },
   { label: "Routes", path: "/routes", icon: Route },
-  { label: "Services", path: "/services", icon: Server },
-  { label: "Backends", path: "/backends", icon: HardDrive },
-  { label: "Consumers", path: "/consumers", icon: Users },
-  { label: "Plugins", path: "/plugins", icon: Puzzle },
-  { label: "Certificates", path: "/certificates", icon: ShieldCheck },
   { type: "divider" as const },
-  { label: "Traffic Logs", path: "/traffic/logs", icon: ScrollText },
-  { label: "Traffic Stats", path: "/traffic/stats", icon: BarChart3 },
+  { label: "Logs", path: "/logs", icon: ScrollText },
+  { label: "Stats", path: "/stats", icon: BarChart3 },
+  { type: "divider" as const },
+  { label: "Settings", path: "/settings", icon: Settings },
 ] as const;
 
 interface SidebarProps {

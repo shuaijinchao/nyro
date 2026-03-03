@@ -1,62 +1,37 @@
-# Compiled Lua sources
-luac.out
+# Rust
+target/
+Cargo.lock
 
-# luarocks build files
-*.zip
-*.tar.gz
+# Node / WebUI
+webui/node_modules/
+webui/dist/
+webui/.vite/
 
-# Object files
-*.o
-*.os
-*.ko
-*.obj
-*.elf
+# Tauri
+src-tauri/icons/*.icns
+src-tauri/icons/*.ico
 
-# Precompiled Headers
-*.gch
-*.pch
+# SQLite runtime data
+*.db
+*.db-wal
+*.db-shm
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-*.def
-*.exp
+# OS
+.DS_Store
+Thumbs.db
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+# Environment
+.env
+.env.*
 
-.idea
-*.DS_Store
-.vscode
+# Logs
+*.log
 
-# Rust build output
-engine/target/
-
-# LuaRocks installation directories
-lua_modules
-share
-lib
-
-# Generated files (auto-generated at startup)
-conf/nginx.conf
-logs/
-ssl/
-uwsgi_temp/
-scgi_temp/
-proxy_temp/
-fastcgi_temp/
-client_body_temp/
-conf/config.yaml
+# pnpm
+.pnpm-store/
