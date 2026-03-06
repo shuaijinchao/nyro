@@ -1,0 +1,76 @@
+name: Release Server Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-server:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: nyro-server-linux-x86_64
+            binary_name: nyro-server
+          - os: macos-latest
+            artifact_name: nyro-server-macos-x86_64
+            binary_name: nyro-server
+          - os: windows-latest
+            artifact_name: nyro-server-windows-x86_64.exe
+            binary_name: nyro-server.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build nyro-server
+        run: cargo build -p nyro-server --release
+
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}"
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}"
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}
+
+  checksums:
+    runs-on: ubuntu-latest
+    needs: build-server
+
+    steps:
+      - name: Download server artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: nyro-server-*
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Upload SHA256SUMS
+        uses: actions/upload-artifact@v4
+        with:
+          name: nyro-server-sha256sums
+          path: artifacts/SHA256SUMS.txt
