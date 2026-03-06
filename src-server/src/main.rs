@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use axum::http::{HeaderValue, Method, header};
 use nyro_core::{Gateway, config::GatewayConfig, logging};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 mod admin_routes;
 
@@ -29,6 +31,20 @@ struct Args {
     #[arg(long, help = "Bearer token for proxy API authentication")]
     proxy_key: Option<String>,
 
+    #[arg(
+        long = "admin-cors-origin",
+        action = clap::ArgAction::Append,
+        help = "Allowed CORS origin for admin API (repeatable, use '*' for any)"
+    )]
+    admin_cors_origins: Vec<String>,
+
+    #[arg(
+        long = "proxy-cors-origin",
+        action = clap::ArgAction::Append,
+        help = "Allowed CORS origin for proxy API (repeatable, use '*' for any)"
+    )]
+    proxy_cors_origins: Vec<String>,
+
     #[arg(long, default_value = "./webui/dist", help = "Path to webui static files")]
     webui_dir: String,
 }
@@ -50,10 +66,27 @@ async fn main() -> anyhow::Result<()> {
             "--admin-key is required when --admin-host is not loopback (localhost/127.0.0.1/::1)"
         );
     }
+    if !is_loopback_host(&args.proxy_host) && proxy_key.is_none() {
+        anyhow::bail!(
+            "--proxy-key is required when --proxy-host is not loopback (localhost/127.0.0.1/::1)"
+        );
+    }
+
+    let admin_cors_origins = if args.admin_cors_origins.is_empty() {
+        default_local_origins(&[args.admin_port])
+    } else {
+        args.admin_cors_origins.clone()
+    };
+    let proxy_cors_origins = if args.proxy_cors_origins.is_empty() {
+        default_local_origins(&[args.proxy_port, args.admin_port])
+    } else {
+        args.proxy_cors_origins.clone()
+    };
 
     let config = GatewayConfig {
         proxy_host: args.proxy_host.clone(),
         proxy_port: args.proxy_port,
+        proxy_cors_origins,
         data_dir: PathBuf::from(data_dir),
         auth_key: proxy_key.clone(),
         ..Default::default()
@@ -82,7 +115,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = admin_router
         .fallback_service(webui_service)
-        .layer(tower_http::cors::CorsLayer::permissive());
+        .layer(build_cors_layer(&admin_cors_origins));
 
     let admin_addr = format!("{}:{}", args.admin_host, args.admin_port);
     let listener = tokio::net::TcpListener::bind(&admin_addr).await?;
@@ -104,4 +137,43 @@ async fn main() -> anyhow::Result<()> {
 
 fn is_loopback_host(host: &str) -> bool {
     matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+fn default_local_origins(ports: &[u16]) -> Vec<String> {
+    let mut origins = vec!["tauri://localhost".to_string(), "http://tauri.localhost".to_string()];
+    for port in ports {
+        origins.push(format!("http://127.0.0.1:{port}"));
+        origins.push(format!("http://localhost:{port}"));
+    }
+    origins
+}
+
+fn parse_allow_origin(origins: &[String]) -> AllowOrigin {
+    if origins.iter().any(|o| o.trim() == "*") {
+        return AllowOrigin::any();
+    }
+
+    let values = origins
+        .iter()
+        .filter_map(|o| HeaderValue::from_str(o.trim()).ok())
+        .collect::<Vec<_>>();
+
+    if values.is_empty() {
+        AllowOrigin::any()
+    } else {
+        AllowOrigin::list(values)
+    }
+}
+
+fn build_cors_layer(origins: &[String]) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(parse_allow_origin(origins))
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::HeaderName::from_static("x-api-key"),
+            header::HeaderName::from_static("anthropic-version"),
+        ])
 }

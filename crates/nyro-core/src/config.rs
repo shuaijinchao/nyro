@@ -4,6 +4,7 @@ use std::path::PathBuf;
 pub struct GatewayConfig {
     pub proxy_host: String,
     pub proxy_port: u16,
+    pub proxy_cors_origins: Vec<String>,
     pub data_dir: PathBuf,
     pub auth_key: Option<String>,
 }
@@ -13,6 +14,7 @@ impl Default for GatewayConfig {
         Self {
             proxy_host: "127.0.0.1".to_string(),
             proxy_port: 19530,
+            proxy_cors_origins: Vec::new(),
             data_dir: default_data_dir(),
             auth_key: None,
         }
