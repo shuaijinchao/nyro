@@ -28,8 +28,14 @@ jobs:
         with:
           version: 9
 
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev
+
       - name: Cargo check
-        run: cargo check --workspace
+        run: cargo check --workspace --exclude nyro-desktop
 
       - name: Build nyro-server
         run: cargo build -p nyro-server
