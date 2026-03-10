@@ -20,15 +20,13 @@ from urllib.parse import quote
 
 PLATFORM_RULES = [
     # (file suffix, arch keywords, platform key, score)
-    (".app.tar.gz", ("x86_64", "_x64", "-x64"), "darwin-x86_64", 100),
-    (".app.tar.gz", ("aarch64", "arm64"),        "darwin-aarch64", 100),
-    (".app.tar.gz", (),                           "darwin-aarch64",  99),
-    ("-setup.exe",  (),                           "windows-x86_64", 100),
-    (".msi",        (),                           "windows-x86_64",  50),
-    (".appimage",   ("aarch64", "arm64"),         "linux-aarch64",  100),
-    (".appimage",   (),                           "linux-x86_64",   100),
-    (".deb",        ("arm64", "aarch64"),         "linux-aarch64",   30),
-    (".deb",        (),                           "linux-x86_64",    30),
+    (".app.tar.gz", ("x86_64",),                   "darwin-x86_64",   100),
+    (".app.tar.gz", ("aarch64",),                  "darwin-aarch64",  100),
+    ("-setup.exe",  ("arm64", "aarch64"),           "windows-aarch64", 100),
+    ("-setup.exe",  ("x64", "x86_64"),             "windows-x86_64",  100),
+    ("-setup.exe",  (),                            "windows-x86_64",   50),
+    (".appimage",   ("aarch64", "arm64"),           "linux-aarch64",   100),
+    (".appimage",   (),                            "linux-x86_64",    100),
 ]
 
 

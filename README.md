@@ -74,7 +74,14 @@ Nyro ships in two forms:
 
 ## Installation
 
-### Desktop App — Quick Install (Recommended)
+### Desktop App — Homebrew (macOS / Linux)
+
+```bash
+brew tap shuaijinchao/nyro
+brew install --cask --no-quarantine nyro
+```
+
+### Desktop App — Shell Script
 
 **macOS / Linux**:
 
@@ -99,16 +106,19 @@ Download installers directly from [Releases](https://github.com/shuaijinchao/nyr
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `Nyro_*_aarch64.dmg` |
-| macOS (Intel) | `Nyro_*_x86_64.dmg` |
-| Windows | `Nyro_*_x64-setup.exe` |
-| Linux (deb) | `Nyro_*_amd64.deb` |
-| Linux (AppImage) | `Nyro_*_amd64.AppImage` |
+| macOS (Intel) | `Nyro_*_x64.dmg` |
+| Windows (x64) | `Nyro_*_x64-setup.exe` |
+| Windows (ARM64) | `Nyro_*_arm64-setup.exe` |
+| Linux (x86_64) | `Nyro_*_amd64.AppImage` |
+| Linux (aarch64) | `Nyro_*_aarch64.AppImage` |
 
 > **macOS note**: The app is not notarized. After manual install run `sudo xattr -rd com.apple.quarantine /Applications/Nyro.app` or use the install script above.
 >
 > **Windows note**: SmartScreen may show "Unknown publisher" — click "More info" → "Run anyway".
 
 ### Server Binary
+
+Available binaries: `nyro-server-linux-x86_64`, `nyro-server-linux-aarch64`, `nyro-server-macos-x86_64`, `nyro-server-macos-aarch64`, `nyro-server-windows-x86_64.exe`, `nyro-server-windows-arm64.exe`
 
 ```bash
 curl -LO https://github.com/shuaijinchao/nyro/releases/latest/download/nyro-server-linux-x86_64

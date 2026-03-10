@@ -16,20 +16,30 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: nyro-desktop-linux-bundle
-            bundles: appimage,deb
+            artifact_name: nyro-desktop-linux-x86_64-bundle
+            bundles: appimage
+            rust_target: ""
+          - os: ubuntu-24.04-arm
+            artifact_name: nyro-desktop-linux-aarch64-bundle
+            bundles: appimage
             rust_target: ""
           - os: macos-latest
             artifact_name: nyro-desktop-macos-aarch64-bundle
             bundles: app,dmg
-            rust_target: aarch64-apple-darwin
-          - os: macos-latest
+            rust_target: ""
+            arch_suffix: aarch64
+          - os: macos-15-intel
             artifact_name: nyro-desktop-macos-x86_64-bundle
             bundles: app,dmg
-            rust_target: x86_64-apple-darwin
+            rust_target: ""
+            arch_suffix: x86_64
           - os: windows-latest
-            artifact_name: nyro-desktop-windows-bundle
-            bundles: nsis,msi
+            artifact_name: nyro-desktop-windows-x64-bundle
+            bundles: nsis
+            rust_target: ""
+          - os: windows-11-arm
+            artifact_name: nyro-desktop-windows-arm64-bundle
+            bundles: nsis
             rust_target: ""
 
     steps:
@@ -82,6 +92,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Rename macOS updater bundle with arch suffix
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ARCH_SUFFIX="${{ matrix.arch_suffix }}"
+          for f in target/release/bundle/macos/*.app.tar.gz; do
+            [ -f "$f" ] || continue
+            dir="$(dirname "$f")"
+            base="$(basename "$f" .app.tar.gz)"
+            mv "$f" "${dir}/${base}_${ARCH_SUFFIX}.app.tar.gz"
+            [ -f "${f}.sig" ] && mv "${f}.sig" "${dir}/${base}_${ARCH_SUFFIX}.app.tar.gz.sig"
+          done
+
       - name: Upload desktop bundle artifact
         uses: actions/upload-artifact@v4
         with:
@@ -112,9 +135,10 @@ jobs:
         run: |
           mkdir -p release-assets
           find artifacts -type f \( \
-            -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \
-            -o -name "*.msi" -o -name "*-setup.exe" \
-            -o -name "*.app.tar.gz" -o -name "*.sig" \
+            -name "*.dmg" -o -name "*.AppImage" \
+            -o -name "*-setup.exe" \
+            -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
+            -o -name "*.AppImage.sig" -o -name "*-setup.exe.sig" \
           \) -exec cp -f {} release-assets/ \;
 
       - name: Generate latest.json
@@ -122,11 +146,6 @@ jobs:
           VERSION: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: python3 scripts/release/gen_latest_json.py --assets-dir release-assets --output latest.json
-
-      - name: Generate SHA256SUMS
-        run: |
-          cd release-assets
-          sha256sum * > SHA256SUMS.txt
 
       - name: Upload desktop release artifact pack
         uses: actions/upload-artifact@v4
@@ -148,3 +167,19 @@ jobs:
             latest.json
           replacesArtifacts: true
           makeLatest: legacy
+
+      - name: Bump Homebrew Cask version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git clone https://x-access-token:${GH_TOKEN}@github.com/shuaijinchao/homebrew-nyro.git /tmp/homebrew-nyro
+          cd /tmp/homebrew-nyro
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Casks/nyro.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/nyro.rb
+          git diff --cached --quiet && echo "No version change" && exit 0
+          git commit -m "bump nyro to ${VERSION}"
+          git push

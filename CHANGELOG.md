@@ -4,6 +4,35 @@ All notable changes to Nyro will be documented in this file.
 
 ---
 
+## v1.0.1
+
+> Released on 2026-03-10
+
+#### Improvements
+
+- **Full ARM64 / aarch64 support**: native builds for all platforms using GitHub Actions ARM runners (`ubuntu-24.04-arm`, `windows-11-arm`, `macos-latest`)
+  - Desktop: Linux aarch64 AppImage, Windows ARM64 NSIS installer
+  - Server: Linux aarch64, macOS aarch64, Windows ARM64 binaries
+- **macOS Intel native build**: use `macos-15-intel` runner instead of cross-compiling on ARM
+- **Homebrew Cask**: `brew tap shuaijinchao/nyro && brew install --cask nyro` (separate `homebrew-nyro` tap repo with auto version bump on release)
+- **Install scripts**: one-line install for macOS/Linux (`install.sh`) and Windows (`install.ps1`), with automatic quarantine removal on macOS
+- **Frontend chunk splitting**: Vite `manualChunks` for react, query, and charts to eliminate >500kB bundle warning
+
+#### Fixes
+
+- **CI**: exclude `nyro-desktop` from `cargo check --workspace` to avoid GTK dependency on Linux CI
+- **CI**: remove unsupported `--manifest-path` from `cargo tauri build`
+- **CI**: add `pkg-config` and `libssl-dev` for server build on ubuntu-latest
+
+#### Cleanup
+
+- Remove MSI and deb packages from desktop release (NSIS + AppImage only)
+- Remove desktop SHA256SUMS.txt (updater `.sig` files provide integrity verification)
+- Move Homebrew Cask to dedicated `homebrew-nyro` repository
+- Fix `main` → `master` branch references in install scripts and README
+
+---
+
 ## v1.0.0
 
 > Released on 2026-03-09

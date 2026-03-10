@@ -74,7 +74,14 @@ Nyro 提供两种形态：
 
 ## 安装
 
-### 桌面应用 — 一键安装（推荐）
+### 桌面应用 — Homebrew（macOS / Linux）
+
+```bash
+brew tap shuaijinchao/nyro
+brew install --cask --no-quarantine nyro
+```
+
+### 桌面应用 — 脚本安装
 
 **macOS / Linux**：
 
@@ -99,16 +106,19 @@ irm https://raw.githubusercontent.com/shuaijinchao/nyro/master/scripts/install/i
 | 平台 | 文件 |
 |---|---|
 | macOS（Apple Silicon） | `Nyro_*_aarch64.dmg` |
-| macOS（Intel） | `Nyro_*_x86_64.dmg` |
-| Windows | `Nyro_*_x64-setup.exe` |
-| Linux（deb） | `Nyro_*_amd64.deb` |
-| Linux（AppImage） | `Nyro_*_amd64.AppImage` |
+| macOS（Intel） | `Nyro_*_x64.dmg` |
+| Windows（x64） | `Nyro_*_x64-setup.exe` |
+| Windows（ARM64） | `Nyro_*_arm64-setup.exe` |
+| Linux（x86_64） | `Nyro_*_amd64.AppImage` |
+| Linux（aarch64） | `Nyro_*_aarch64.AppImage` |
 
 > **macOS 提示**：应用未经公证，手动安装后请执行 `sudo xattr -rd com.apple.quarantine /Applications/Nyro.app`，或使用上方一键脚本。
 >
 > **Windows 提示**：SmartScreen 可能提示"未知发布者"，点击「更多信息」→「仍要运行」即可。
 
 ### 服务端二进制
+
+可用二进制：`nyro-server-linux-x86_64`、`nyro-server-linux-aarch64`、`nyro-server-macos-x86_64`、`nyro-server-macos-aarch64`、`nyro-server-windows-x86_64.exe`、`nyro-server-windows-arm64.exe`
 
 ```bash
 curl -LO https://github.com/shuaijinchao/nyro/releases/latest/download/nyro-server-linux-x86_64

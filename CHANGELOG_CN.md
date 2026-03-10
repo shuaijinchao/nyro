@@ -4,6 +4,35 @@ Nyro 的所有重要变更均记录在此文件中。
 
 ---
 
+## v1.0.1
+
+> 发布于 2026-03-10
+
+#### 改进
+
+- **全平台 ARM64 / aarch64 原生构建**：使用 GitHub Actions ARM runner（`ubuntu-24.04-arm`、`windows-11-arm`、`macos-latest`）原生构建，零交叉编译
+  - 桌面端：Linux aarch64 AppImage、Windows ARM64 NSIS 安装包
+  - 服务端：Linux aarch64、macOS aarch64、Windows ARM64 二进制
+- **macOS Intel 原生构建**：使用 `macos-15-intel` runner 原生编译，不再依赖 ARM 交叉编译
+- **Homebrew Cask 支持**：`brew tap shuaijinchao/nyro && brew install --cask nyro`（独立 `homebrew-nyro` tap 仓库，发版自动同步版本）
+- **一键安装脚本**：macOS/Linux（`install.sh`）和 Windows（`install.ps1`），macOS 自动移除隔离属性
+- **前端 chunk 拆分**：Vite `manualChunks` 拆分 react/query/charts，消除 >500kB 打包警告
+
+#### 修复
+
+- **CI**：`cargo check --workspace` 排除 `nyro-desktop`，避免 Linux CI 依赖 GTK
+- **CI**：移除 `cargo tauri build` 不支持的 `--manifest-path` 参数
+- **CI**：添加 `pkg-config` 和 `libssl-dev` 依赖
+
+#### 清理
+
+- 移除桌面发布中的 MSI 和 deb 包（仅保留 NSIS + AppImage）
+- 移除桌面 SHA256SUMS.txt（updater `.sig` 文件已提供完整性校验）
+- Homebrew Cask 迁移至独立 `homebrew-nyro` 仓库
+- 修复安装脚本和 README 中 `main` → `master` 分支引用
+
+---
+
 ## v1.0.0
 
 > 发布于 2026-03-09

@@ -16,11 +16,20 @@ jobs:
           - os: ubuntu-latest
             artifact_name: nyro-server-linux-x86_64
             binary_name: nyro-server
-          - os: macos-latest
+          - os: ubuntu-24.04-arm
+            artifact_name: nyro-server-linux-aarch64
+            binary_name: nyro-server
+          - os: macos-15-intel
             artifact_name: nyro-server-macos-x86_64
+            binary_name: nyro-server
+          - os: macos-latest
+            artifact_name: nyro-server-macos-aarch64
             binary_name: nyro-server
           - os: windows-latest
             artifact_name: nyro-server-windows-x86_64.exe
+            binary_name: nyro-server.exe
+          - os: windows-11-arm
+            artifact_name: nyro-server-windows-arm64.exe
             binary_name: nyro-server.exe
 
     steps:
@@ -44,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Copy-Item "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}"
+          Copy-Item "target\release\${{ matrix.binary_name }}" "dist\${{ matrix.artifact_name }}"
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4

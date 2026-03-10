@@ -48,8 +48,8 @@ Environment Variables:
 Supported Platforms:
     - macOS arm64 (Apple Silicon): .dmg
     - macOS x86_64 (Intel):        .dmg
-    - Linux x86_64:  .deb (Debian/Ubuntu) or .AppImage (universal)
-    - Linux aarch64: .deb (Debian/Ubuntu) or .AppImage (universal)
+    - Linux x86_64:                .AppImage
+    - Linux aarch64:               .AppImage
 
 EOF
     exit 0
@@ -66,8 +66,8 @@ detect_platform() {
     esac
 
     case "$ARCH" in
-        x86_64|amd64)   ARCH_LABEL="x86_64"; DEB_ARCH="amd64" ;;
-        aarch64|arm64)  ARCH_LABEL="aarch64"; DEB_ARCH="arm64" ;;
+        x86_64|amd64)   ARCH_LABEL="x86_64"; DMG_ARCH="x64"; DEB_ARCH="amd64" ;;
+        aarch64|arm64)  ARCH_LABEL="aarch64"; DMG_ARCH="aarch64"; DEB_ARCH="arm64" ;;
         *)              die "Unsupported architecture: $ARCH" ;;
     esac
 
@@ -76,23 +76,8 @@ detect_platform() {
 
 detect_linux_pkg_manager() {
     [[ "$PLATFORM" != "linux" ]] && return
-
-    if command -v apt-get &>/dev/null; then
-        PKG_MANAGER="apt"
-        PKG_EXT="deb"
-    elif command -v dnf &>/dev/null; then
-        PKG_MANAGER="dnf"
-        PKG_EXT="rpm"
-    elif command -v yum &>/dev/null; then
-        PKG_MANAGER="yum"
-        PKG_EXT="rpm"
-    else
-        PKG_MANAGER="appimage"
-        PKG_EXT="AppImage"
-        warn "No supported package manager found, falling back to AppImage"
-    fi
-
-    info "Package format: $PKG_EXT ($PKG_MANAGER)"
+    PKG_EXT="AppImage"
+    info "Package format: AppImage"
 }
 
 get_version() {
@@ -133,23 +118,12 @@ build_download_url() {
 
     case "$PLATFORM" in
         macos)
-            DOWNLOAD_URL="${base_url}/Nyro_${RELEASE_VERSION}_${ARCH_LABEL}.dmg"
-            FILENAME="Nyro_${RELEASE_VERSION}_${ARCH_LABEL}.dmg"
+            DOWNLOAD_URL="${base_url}/Nyro_${RELEASE_VERSION}_${DMG_ARCH}.dmg"
+            FILENAME="Nyro_${RELEASE_VERSION}_${DMG_ARCH}.dmg"
             ;;
         linux)
-            case "$PKG_EXT" in
-                deb)
-                    DOWNLOAD_URL="${base_url}/Nyro_${RELEASE_VERSION}_${DEB_ARCH}.deb"
-                    FILENAME="Nyro_${RELEASE_VERSION}_${DEB_ARCH}.deb"
-                    ;;
-                AppImage)
-                    DOWNLOAD_URL="${base_url}/Nyro_${RELEASE_VERSION}_${DEB_ARCH}.AppImage"
-                    FILENAME="Nyro_${RELEASE_VERSION}_${DEB_ARCH}.AppImage"
-                    ;;
-                *)
-                    die "Unsupported package format: $PKG_EXT"
-                    ;;
-            esac
+            DOWNLOAD_URL="${base_url}/Nyro_${RELEASE_VERSION}_${DEB_ARCH}.AppImage"
+            FILENAME="Nyro_${RELEASE_VERSION}_${DEB_ARCH}.AppImage"
             ;;
     esac
 
@@ -173,47 +147,33 @@ download_installer() {
 install_linux() {
     info "Installing ${APP_NAME}..."
 
-    case "$PKG_MANAGER" in
-        apt)
-            run sudo dpkg -i "$DOWNLOAD_PATH"
-            run sudo apt-get install -f -y
-            ;;
-        dnf)
-            run sudo dnf install -y "$DOWNLOAD_PATH"
-            ;;
-        yum)
-            run sudo yum install -y "$DOWNLOAD_PATH"
-            ;;
-        appimage)
-            local install_dir="${HOME}/.local/bin"
-            run mkdir -p "$install_dir"
-            run chmod +x "$DOWNLOAD_PATH"
-            run cp "$DOWNLOAD_PATH" "${install_dir}/nyro"
+    local install_dir="${HOME}/.local/bin"
+    run mkdir -p "$install_dir"
+    run chmod +x "$DOWNLOAD_PATH"
+    run cp "$DOWNLOAD_PATH" "${install_dir}/nyro"
 
-            if [[ ":$PATH:" != *":${install_dir}:"* ]]; then
-                warn "Add ${install_dir} to your PATH:"
+    if [[ ":$PATH:" != *":${install_dir}:"* ]]; then
+        warn "Add ${install_dir} to your PATH:"
 
-                local shell_name rc_file export_line
-                shell_name="$(basename "${SHELL:-/bin/bash}")"
-                case "$shell_name" in
-                    zsh)  rc_file="$HOME/.zshrc" ;;
-                    fish) rc_file="$HOME/.config/fish/config.fish" ;;
-                    *)    rc_file="$HOME/.bashrc" ;;
-                esac
+        local shell_name rc_file export_line
+        shell_name="$(basename "${SHELL:-/bin/bash}")"
+        case "$shell_name" in
+            zsh)  rc_file="$HOME/.zshrc" ;;
+            fish) rc_file="$HOME/.config/fish/config.fish" ;;
+            *)    rc_file="$HOME/.bashrc" ;;
+        esac
 
-                export_line="export PATH=\"${install_dir}:\$PATH\""
-                [[ "$shell_name" == "fish" ]] && export_line="fish_add_path ${install_dir}"
+        export_line="export PATH=\"${install_dir}:\$PATH\""
+        [[ "$shell_name" == "fish" ]] && export_line="fish_add_path ${install_dir}"
 
-                if [[ -f "$rc_file" ]] && grep -qF "$install_dir" "$rc_file" 2>/dev/null; then
-                    info "PATH entry already in $rc_file"
-                else
-                    run echo "$export_line" >> "$rc_file"
-                    info "Added ${install_dir} to PATH in $rc_file"
-                    warn "Run: source $rc_file  (or restart terminal)"
-                fi
-            fi
-            ;;
-    esac
+        if [[ -f "$rc_file" ]] && grep -qF "$install_dir" "$rc_file" 2>/dev/null; then
+            info "PATH entry already in $rc_file"
+        else
+            run echo "$export_line" >> "$rc_file"
+            info "Added ${install_dir} to PATH in $rc_file"
+            warn "Run: source $rc_file  (or restart terminal)"
+        fi
+    fi
 
     success "${APP_NAME} installed successfully!"
 }
