@@ -276,11 +276,13 @@ export default function RoutesPage() {
             </div>
             <div className="col-span-2 space-y-2">
               <FieldLabel>{isZh ? "访问控制（需 API Key）" : "Access Control (API Key required)"}</FieldLabel>
-              <Switch
-                id="create-route-access-control"
-                checked={createForm.access_control}
-                onCheckedChange={(checked) => setCreateForm((prev) => ({ ...prev, access_control: checked }))}
-              />
+              <div className="pt-1">
+                <Switch
+                  id="create-route-access-control"
+                  checked={createForm.access_control}
+                  onCheckedChange={(checked) => setCreateForm((prev) => ({ ...prev, access_control: checked }))}
+                />
+              </div>
             </div>
           </div>
           <div className="flex gap-3">
@@ -440,12 +442,14 @@ export default function RoutesPage() {
                     )}
                     <div className="col-span-2 space-y-2">
                       <FieldLabel>{isZh ? "访问控制（需 API Key）" : "Access Control (API Key required)"}</FieldLabel>
-                      <Switch
-                        checked={editForm.access_control}
-                        onCheckedChange={(checked) =>
-                          setEditForm((prev) => (prev ? { ...prev, access_control: checked } : prev))
-                        }
-                      />
+                      <div className="pt-1">
+                        <Switch
+                          checked={editForm.access_control}
+                          onCheckedChange={(checked) =>
+                            setEditForm((prev) => (prev ? { ...prev, access_control: checked } : prev))
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-3">
