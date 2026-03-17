@@ -7,7 +7,9 @@ pub mod protocol;
 pub mod proxy;
 pub mod router;
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use sqlx::SqlitePool;
 use tokio::sync::mpsc;
@@ -15,12 +17,19 @@ use tokio::sync::mpsc;
 use config::GatewayConfig;
 use logging::LogEntry;
 
+#[derive(Clone, Debug)]
+pub struct CapabilityCacheEntry {
+    pub capabilities: Vec<String>,
+    pub cached_at: Instant,
+}
+
 #[derive(Clone)]
 pub struct Gateway {
     pub config: GatewayConfig,
     pub db: SqlitePool,
     pub http_client: reqwest::Client,
     pub route_cache: Arc<tokio::sync::RwLock<router::RouteCache>>,
+    pub ollama_capability_cache: Arc<tokio::sync::RwLock<HashMap<String, CapabilityCacheEntry>>>,
     pub log_tx: mpsc::Sender<LogEntry>,
 }
 
@@ -36,6 +45,7 @@ impl Gateway {
         let route_cache = Arc::new(tokio::sync::RwLock::new(
             router::RouteCache::load(&db).await?,
         ));
+        let ollama_capability_cache = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
 
         let (log_tx, log_rx) = mpsc::channel(1024);
 
@@ -44,6 +54,7 @@ impl Gateway {
             db,
             http_client,
             route_cache,
+            ollama_capability_cache,
             log_tx,
         };
 
@@ -61,5 +72,45 @@ impl Gateway {
 
     pub fn admin(&self) -> admin::AdminService {
         admin::AdminService::new(self.clone())
+    }
+
+    pub async fn get_ollama_capabilities_cached(
+        &self,
+        provider_id: &str,
+        model: &str,
+        ttl: Duration,
+    ) -> Option<Vec<String>> {
+        let key = format!("{provider_id}:{model}");
+        let cache = self.ollama_capability_cache.read().await;
+        cache.get(&key).and_then(|entry| {
+            if entry.cached_at.elapsed() < ttl {
+                Some(entry.capabilities.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub async fn set_ollama_capabilities_cache(
+        &self,
+        provider_id: &str,
+        model: &str,
+        capabilities: Vec<String>,
+    ) {
+        let key = format!("{provider_id}:{model}");
+        let mut cache = self.ollama_capability_cache.write().await;
+        cache.insert(
+            key,
+            CapabilityCacheEntry {
+                capabilities,
+                cached_at: Instant::now(),
+            },
+        );
+    }
+
+    pub async fn clear_ollama_capability_cache_for_provider(&self, provider_id: &str) {
+        let prefix = format!("{provider_id}:");
+        let mut cache = self.ollama_capability_cache.write().await;
+        cache.retain(|k, _| !k.starts_with(&prefix));
     }
 }

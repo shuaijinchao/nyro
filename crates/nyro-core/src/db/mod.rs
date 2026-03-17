@@ -26,6 +26,7 @@ pub async fn init_pool(data_dir: &Path) -> anyhow::Result<SqlitePool> {
 
 pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::raw_sql(INIT_SQL).execute(pool).await?;
+    ensure_provider_column(pool, "vendor", "TEXT").await?;
     ensure_provider_column(pool, "preset_key", "TEXT").await?;
     ensure_provider_column(pool, "region", "TEXT").await?;
     ensure_provider_column(pool, "channel", "TEXT").await?;
@@ -38,6 +39,7 @@ pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     ensure_api_key_tables(pool).await?;
     ensure_api_key_column(pool, "rpd", "INTEGER").await?;
     backfill_provider_channel(pool).await?;
+    backfill_provider_vendor(pool).await?;
     backfill_route_fields(pool).await?;
     Ok(())
 }
@@ -49,6 +51,22 @@ async fn backfill_provider_channel(pool: &SqlitePool) -> anyhow::Result<()> {
             .await?;
     }
 
+    Ok(())
+}
+
+async fn backfill_provider_vendor(pool: &SqlitePool) -> anyhow::Result<()> {
+    if column_exists(pool, "providers", "vendor").await? && column_exists(pool, "providers", "preset_key").await? {
+        sqlx::query(
+            "UPDATE providers \
+             SET vendor = lower(trim(preset_key)) \
+             WHERE (vendor IS NULL OR trim(vendor) = '') \
+               AND preset_key IS NOT NULL \
+               AND trim(preset_key) != '' \
+               AND lower(trim(preset_key)) != 'custom'",
+        )
+        .execute(pool)
+        .await?;
+    }
     Ok(())
 }
 
@@ -177,6 +195,7 @@ const INIT_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS providers (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
+    vendor      TEXT,
     protocol    TEXT NOT NULL,
     base_url    TEXT NOT NULL,
     preset_key  TEXT,

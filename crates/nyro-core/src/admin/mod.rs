@@ -21,7 +21,7 @@ impl AdminService {
 
     pub async fn list_providers(&self) -> anyhow::Result<Vec<Provider>> {
         let rows = sqlx::query_as::<_, Provider>(
-            "SELECT id, name, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at FROM providers ORDER BY created_at DESC",
+            "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at FROM providers ORDER BY created_at DESC",
         )
         .fetch_all(&self.gw.db)
         .await?;
@@ -30,7 +30,7 @@ impl AdminService {
 
     pub async fn get_provider(&self, id: &str) -> anyhow::Result<Provider> {
         let row = sqlx::query_as::<_, Provider>(
-            "SELECT id, name, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at FROM providers WHERE id = ?",
+            "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at FROM providers WHERE id = ?",
         )
         .bind(id)
         .fetch_one(&self.gw.db)
@@ -40,11 +40,13 @@ impl AdminService {
 
     pub async fn create_provider(&self, input: CreateProvider) -> anyhow::Result<Provider> {
         let id = uuid::Uuid::new_v4().to_string();
+        let vendor = normalize_vendor(input.vendor.as_deref());
         sqlx::query(
-            "INSERT INTO providers (id, name, protocol, base_url, preset_key, channel, models_endpoint, static_models, api_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO providers (id, name, vendor, protocol, base_url, preset_key, channel, models_endpoint, static_models, api_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&input.name)
+        .bind(&vendor)
         .bind(&input.protocol)
         .bind(&input.base_url)
         .bind(&input.preset_key)
@@ -64,8 +66,14 @@ impl AdminService {
         input: UpdateProvider,
     ) -> anyhow::Result<Provider> {
         let current = self.get_provider(id).await?;
+        let current_base_url = current.base_url.clone();
 
         let name = input.name.unwrap_or(current.name);
+        let vendor = if input.vendor.is_some() {
+            normalize_vendor(input.vendor.as_deref())
+        } else {
+            normalize_vendor(current.vendor.as_deref())
+        };
         let protocol = input.protocol.unwrap_or(current.protocol);
         let base_url = input.base_url.unwrap_or(current.base_url);
         let preset_key = input.preset_key.or(current.preset_key);
@@ -74,11 +82,13 @@ impl AdminService {
         let static_models = input.static_models.or(current.static_models);
         let api_key = input.api_key.unwrap_or(current.api_key);
         let is_active = input.is_active.unwrap_or(current.is_active);
+        let base_url_changed = base_url != current_base_url;
 
         sqlx::query(
-            "UPDATE providers SET name=?, protocol=?, base_url=?, preset_key=?, channel=?, models_endpoint=?, static_models=?, api_key=?, is_active=?, updated_at=datetime('now') WHERE id=?",
+            "UPDATE providers SET name=?, vendor=?, protocol=?, base_url=?, preset_key=?, channel=?, models_endpoint=?, static_models=?, api_key=?, is_active=?, updated_at=datetime('now') WHERE id=?",
         )
         .bind(&name)
+        .bind(&vendor)
         .bind(&protocol)
         .bind(&base_url)
         .bind(&preset_key)
@@ -91,6 +101,10 @@ impl AdminService {
         .execute(&self.gw.db)
         .await?;
 
+        if base_url_changed {
+            self.gw.clear_ollama_capability_cache_for_provider(id).await;
+        }
+
         self.get_provider(id).await
     }
 
@@ -99,11 +113,15 @@ impl AdminService {
             .bind(id)
             .execute(&self.gw.db)
             .await?;
+        self.gw.clear_ollama_capability_cache_for_provider(id).await;
         Ok(())
     }
 
     pub async fn test_provider(&self, id: &str) -> anyhow::Result<TestResult> {
         let provider = self.get_provider(id).await?;
+        self.gw
+            .clear_ollama_capability_cache_for_provider(&provider.id)
+            .await;
         let start = Instant::now();
         let base_url = provider.base_url.trim();
         if base_url.is_empty() {
@@ -651,6 +669,7 @@ impl AdminService {
                 .into_iter()
                 .map(|p| ExportProvider {
                     name: p.name,
+                    vendor: p.vendor,
                     protocol: p.protocol,
                     base_url: p.base_url,
                     preset_key: p.preset_key,
@@ -695,6 +714,7 @@ impl AdminService {
                 let _ = self
                     .create_provider(CreateProvider {
                         name: p.name.clone(),
+                        vendor: p.vendor.clone(),
                         protocol: p.protocol.clone(),
                         base_url: p.base_url.clone(),
                         preset_key: p.preset_key.clone(),
@@ -838,6 +858,13 @@ fn ensure_virtual_model(model: &str) -> anyhow::Result<()> {
         anyhow::bail!("virtual_model cannot be empty");
     }
     Ok(())
+}
+
+fn normalize_vendor(vendor: Option<&str>) -> Option<String> {
+    vendor
+        .map(str::trim)
+        .filter(|v| !v.is_empty() && *v != "custom")
+        .map(|v| v.to_lowercase())
 }
 
 fn resolve_models_endpoint(provider: &Provider) -> Option<String> {

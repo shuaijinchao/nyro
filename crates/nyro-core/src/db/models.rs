@@ -5,6 +5,7 @@ use sqlx::FromRow;
 pub struct Provider {
     pub id: String,
     pub name: String,
+    pub vendor: Option<String>,
     pub protocol: String,
     pub base_url: String,
     pub preset_key: Option<String>,
@@ -86,6 +87,7 @@ pub struct RequestLog {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateProvider {
     pub name: String,
+    pub vendor: Option<String>,
     pub protocol: String,
     pub base_url: String,
     pub preset_key: Option<String>,
@@ -99,6 +101,7 @@ pub struct CreateProvider {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateProvider {
     pub name: Option<String>,
+    pub vendor: Option<String>,
     pub protocol: Option<String>,
     pub base_url: Option<String>,
     pub preset_key: Option<String>,
@@ -226,6 +229,7 @@ pub struct ExportData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportProvider {
     pub name: String,
+    pub vendor: Option<String>,
     pub protocol: String,
     pub base_url: String,
     pub preset_key: Option<String>,

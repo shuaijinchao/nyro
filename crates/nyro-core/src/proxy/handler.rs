@@ -7,6 +7,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::StreamExt;
+use reqwest::Url;
 use serde_json::Value;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -18,6 +19,8 @@ use crate::protocol::Protocol;
 use crate::proxy::client::ProxyClient;
 use crate::Gateway;
 
+const OLLAMA_CAPABILITY_CACHE_TTL_SECS: u64 = 3600;
+
 // ── OpenAI ingress: POST /v1/chat/completions ──
 
 pub async fn openai_proxy(
@@ -26,6 +29,16 @@ pub async fn openai_proxy(
     Json(body): Json<Value>,
 ) -> Response {
     universal_proxy(gw, headers, body, Protocol::OpenAI).await
+}
+
+// ── OpenAI Responses API ingress: POST /v1/responses ──
+
+pub async fn responses_proxy(
+    State(gw): State<Gateway>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    universal_proxy(gw, headers, body, Protocol::ResponsesAPI).await
 }
 
 // ── Anthropic ingress: POST /v1/messages ──
@@ -73,15 +86,21 @@ async fn universal_proxy(gw: Gateway, headers: HeaderMap, body: Value, ingress: 
     proxy_pipeline(gw, headers, internal, ingress).await
 }
 
-async fn proxy_pipeline(gw: Gateway, headers: HeaderMap, internal: InternalRequest, ingress: Protocol) -> Response {
+async fn proxy_pipeline(
+    gw: Gateway,
+    headers: HeaderMap,
+    mut internal: InternalRequest,
+    ingress: Protocol,
+) -> Response {
     let start = Instant::now();
     let request_model = internal.model.clone();
     let is_stream = internal.stream;
 
     let ingress_str = ingress.to_string();
+    let route_protocol = ingress.route_protocol();
     let route = {
         let cache = gw.route_cache.read().await;
-        cache.match_route(&ingress_str, &request_model).cloned()
+        cache.match_route(route_protocol, &request_model).cloned()
     };
     let route = match route {
         Some(r) => r,
@@ -98,18 +117,20 @@ async fn proxy_pipeline(gw: Gateway, headers: HeaderMap, internal: InternalReque
         Err(e) => return error_response(502, &format!("provider error: {e}")),
     };
 
+    let actual_model = if route.target_model.is_empty() || route.target_model == "*" {
+        request_model.clone()
+    } else {
+        route.target_model.clone()
+    };
+
+    maybe_strip_ollama_tools(&gw, &provider, &actual_model, &mut internal).await;
+
     let egress: Protocol = provider.protocol.parse().unwrap_or(Protocol::OpenAI);
 
     let encoder = crate::protocol::get_encoder(egress);
     let (egress_body, extra_headers) = match encoder.encode_request(&internal) {
         Ok(r) => r,
         Err(e) => return error_response(500, &format!("encode error: {e}")),
-    };
-
-    let actual_model = if route.target_model.is_empty() || route.target_model == "*" {
-        request_model.clone()
-    } else {
-        route.target_model.clone()
     };
 
     let egress_body = override_model(egress_body, &actual_model, egress);
@@ -155,6 +176,123 @@ async fn proxy_pipeline(gw: Gateway, headers: HeaderMap, internal: InternalReque
         )
         .await
     }
+}
+
+async fn maybe_strip_ollama_tools(
+    gw: &Gateway,
+    provider: &Provider,
+    model_for_capability_check: &str,
+    req: &mut InternalRequest,
+) {
+    if !is_ollama_provider(provider) {
+        return;
+    }
+
+    if req.tools.is_none() && req.tool_choice.is_none() {
+        return;
+    }
+
+    let caps = match get_ollama_capabilities(gw, provider, model_for_capability_check).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                "failed to fetch capabilities for model {}, skipping tools check: {}",
+                model_for_capability_check,
+                e
+            );
+            return;
+        }
+    };
+
+    let supports_tools = caps.iter().any(|c| c == "tools");
+    if !supports_tools {
+        tracing::warn!(
+            "tools stripped for model {} (tools not supported, capabilities: {:?})",
+            model_for_capability_check,
+            caps
+        );
+        req.tools = None;
+        req.tool_choice = None;
+        req.extra.remove("tools");
+        req.extra.remove("tool_choice");
+    }
+}
+
+async fn get_ollama_capabilities(
+    gw: &Gateway,
+    provider: &Provider,
+    model: &str,
+) -> anyhow::Result<Vec<String>> {
+    let ttl = std::time::Duration::from_secs(OLLAMA_CAPABILITY_CACHE_TTL_SECS);
+    if let Some(cached) = gw
+        .get_ollama_capabilities_cached(&provider.id, model, ttl)
+        .await
+    {
+        return Ok(cached);
+    }
+
+    let caps = fetch_ollama_capabilities(&gw.http_client, &provider.base_url, model).await?;
+    gw.set_ollama_capabilities_cache(&provider.id, model, caps.clone())
+        .await;
+    Ok(caps)
+}
+
+async fn fetch_ollama_capabilities(
+    http: &reqwest::Client,
+    base_url: &str,
+    model: &str,
+) -> anyhow::Result<Vec<String>> {
+    let url = build_ollama_show_url(base_url)?;
+
+    let resp = http
+        .post(url)
+        .json(&serde_json::json!({ "name": model }))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        anyhow::bail!("ollama /api/show returned status {}", resp.status());
+    }
+
+    let json: Value = resp.json().await?;
+    let caps = json
+        .get("capabilities")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| c.as_str().map(ToString::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(caps)
+}
+
+fn build_ollama_show_url(base_url: &str) -> anyhow::Result<Url> {
+    let mut url = Url::parse(base_url)?;
+    let raw_path = url.path().trim_end_matches('/');
+    let path = if raw_path.is_empty() {
+        "/api/show".to_string()
+    } else if raw_path.ends_with("/v1") {
+        let prefix = raw_path.trim_end_matches("/v1");
+        if prefix.is_empty() {
+            "/api/show".to_string()
+        } else {
+            format!("{prefix}/api/show")
+        }
+    } else {
+        format!("{raw_path}/api/show")
+    };
+    url.set_path(&path);
+    url.set_query(None);
+    Ok(url)
+}
+
+fn is_ollama_provider(provider: &Provider) -> bool {
+    provider
+        .vendor
+        .as_deref()
+        .is_some_and(|v| v.eq_ignore_ascii_case("ollama"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -502,7 +640,7 @@ fn extract_api_key(headers: &HeaderMap) -> Option<String> {
 
 async fn get_provider(gw: &Gateway, id: &str) -> anyhow::Result<Provider> {
     sqlx::query_as::<_, Provider>(
-        "SELECT id, name, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at \
+        "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at \
          FROM providers WHERE id = ? AND is_active = 1",
     )
     .bind(id)
