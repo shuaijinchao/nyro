@@ -43,6 +43,8 @@ function resolveHTTP(cmd: string, args?: Record<string, unknown>): HTTPMapping {
       return { method: "GET", url: `${base}/providers` };
     case "get_provider":
       return { method: "GET", url: `${base}/providers/${args?.id}` };
+    case "get_provider_presets":
+      return { method: "GET", url: `${base}/providers/presets` };
     case "create_provider":
       return { method: "POST", url: `${base}/providers`, body: args?.input as Record<string, unknown> };
     case "update_provider":
@@ -55,6 +57,11 @@ function resolveHTTP(cmd: string, args?: Record<string, unknown>): HTTPMapping {
       return { method: "GET", url: `${base}/providers/${args?.id}/test-models` };
     case "get_provider_models":
       return { method: "GET", url: `${base}/providers/${args?.id}/models` };
+    case "get_model_capabilities":
+      return {
+        method: "GET",
+        url: `${base}/providers/${args?.providerId}/model-capabilities?model=${encodeURIComponent(String(args?.model ?? ""))}`,
+      };
 
     case "list_routes":
       return { method: "GET", url: `${base}/routes` };

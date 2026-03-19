@@ -4,7 +4,7 @@ import { Check, Copy, Loader2, TerminalSquare, Wrench } from "lucide-react";
 
 import { backend, IS_TAURI } from "@/lib/backend";
 import { localizeBackendErrorMessage } from "@/lib/backend-error";
-import type { ApiKey, GatewayStatus, Route as RouteType } from "@/lib/types";
+import type { ApiKey, GatewayStatus, ModelCapabilities, Route as RouteType } from "@/lib/types";
 import { useLocale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import {
@@ -253,8 +253,9 @@ function cliPreviewTemplate(params: {
   host: string;
   apiKey: string;
   model: string;
+  capabilities?: ModelCapabilities | null;
 }) {
-  const { tool, host, apiKey, model } = params;
+  const { tool, host, apiKey, model, capabilities } = params;
   if (tool.id === "claude-code") {
     return `# ~/.claude/settings.json
 {
@@ -271,6 +272,10 @@ function cliPreviewTemplate(params: {
 }`;
   }
   if (tool.id === "codex-cli") {
+    const reasoningLine = capabilities?.reasoning ? 'model_reasoning_effort = "high"\n' : "";
+    const contextLine = capabilities?.context_window
+      ? `model_context_window = ${capabilities.context_window}\n`
+      : "";
     return `# ~/.codex/auth.json
 {
   "OPENAI_API_KEY": "${apiKey}"
@@ -279,7 +284,7 @@ function cliPreviewTemplate(params: {
 # ~/.codex/config.toml
 model_provider = "nyro"
 model = "${model}"
-model_reasoning_effort = "high"
+${reasoningLine}${contextLine}model_catalog_json = "~/.codex/nyro-models.json"
 disable_response_storage = true
 
 [model_providers.nyro]
@@ -449,6 +454,26 @@ export default function ConnectPage() {
     () => cliAvailableKeys.find((key) => key.id === selectedCliKeyId) ?? null,
     [cliAvailableKeys, selectedCliKeyId],
   );
+  const { data: selectedCliCapabilities } = useQuery<ModelCapabilities | null>({
+    queryKey: [
+      "connect-cli-model-capabilities",
+      selectedCliRoute?.target_provider,
+      selectedCliRoute?.target_model,
+    ],
+    queryFn: async () => {
+      if (!selectedCliRoute?.target_provider || !selectedCliRoute?.target_model.trim()) return null;
+      try {
+        return await backend<ModelCapabilities>("get_model_capabilities", {
+          providerId: selectedCliRoute.target_provider,
+          model: selectedCliRoute.target_model.trim(),
+        });
+      } catch {
+        return null;
+      }
+    },
+    enabled: Boolean(selectedCliRoute?.target_provider && selectedCliRoute?.target_model.trim()),
+    staleTime: 60_000,
+  });
   const cliEffectiveApiKey =
     selectedCliRoute?.access_control
       ? selectedCliApiKey?.key ?? UNSELECTED_KEY_PLACEHOLDER
@@ -472,6 +497,7 @@ export default function ConnectPage() {
     host,
     apiKey: cliEffectiveApiKey,
     model: cliModel,
+    capabilities: selectedCliCapabilities,
   });
   const cliPreviewLang = "bash";
 
@@ -488,6 +514,12 @@ export default function ConnectPage() {
         host,
         apiKey: cliEffectiveApiKey,
         model: cliModel,
+        capabilities: selectedCliCapabilities
+          ? {
+              contextWindow: selectedCliCapabilities.context_window,
+              reasoning: selectedCliCapabilities.reasoning,
+            }
+          : undefined,
       }),
     onSuccess: () => {
       setCliActionMessage({
@@ -771,6 +803,15 @@ export default function ConnectPage() {
                 <p className="text-xs text-slate-500">
                   {isZh ? "仅展示将被更新的配置片段" : "Only showing configuration fragments to be updated"}
                 </p>
+                {selectedCliCapabilities && (
+                  <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                    {selectedCliCapabilities.reasoning && <Badge variant="success">{isZh ? "推理" : "Reasoning"}</Badge>}
+                    {selectedCliCapabilities.tool_call && <Badge variant="success">{isZh ? "工具调用" : "Tools"}</Badge>}
+                    <Badge variant="outline">
+                      {isZh ? "上下文" : "Ctx"} {Math.round(selectedCliCapabilities.context_window / 1024)}K
+                    </Badge>
+                  </div>
+                )}
                 <div className="connect-cli-preview relative overflow-hidden rounded-lg border">
                   <button
                     onClick={() => copyText(cliPreview, "cli")}

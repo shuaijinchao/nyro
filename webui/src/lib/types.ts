@@ -8,7 +8,11 @@ export interface Provider {
   preset_key?: string | null;
   channel?: string | null;
   models_endpoint?: string | null;
+  models_source?: string | null;
+  capabilities_source?: string | null;
   static_models?: string | null;
+  last_test_success?: boolean | null;
+  last_test_at?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -107,6 +111,45 @@ export interface TestResult {
   error?: string;
 }
 
+export interface ModelCapabilities {
+  provider: string;
+  model_id: string;
+  context_window: number;
+  output_max_tokens?: number | null;
+  tool_call: boolean;
+  reasoning: boolean;
+  input_modalities: string[];
+  output_modalities: string[];
+  input_cost?: number | null;
+  output_cost?: number | null;
+}
+
+export type ProviderProtocol = "openai" | "anthropic" | "gemini";
+
+export interface ProviderChannelPreset {
+  id: string;
+  label: {
+    zh: string;
+    en: string;
+  };
+  baseUrls: Partial<Record<ProviderProtocol, string>>;
+  modelsSource?: string;
+  capabilitiesSource?: string;
+  modelsEndpoint?: string;
+  staticModels?: string[];
+}
+
+export interface ProviderPreset {
+  id: string;
+  label: {
+    zh: string;
+    en: string;
+  };
+  icon?: string;
+  defaultProtocol: ProviderProtocol;
+  channels?: ProviderChannelPreset[];
+}
+
 export interface CreateProvider {
   name: string;
   vendor?: string;
@@ -115,6 +158,8 @@ export interface CreateProvider {
   preset_key?: string;
   channel?: string;
   models_endpoint?: string;
+  models_source?: string;
+  capabilities_source?: string;
   static_models?: string;
   api_key: string;
 }
@@ -127,6 +172,8 @@ export interface UpdateProvider {
   preset_key?: string;
   channel?: string;
   models_endpoint?: string;
+  models_source?: string;
+  capabilities_source?: string;
   static_models?: string;
   api_key?: string;
   is_active?: boolean;
@@ -196,6 +243,8 @@ export interface ExportProvider {
   preset_key?: string | null;
   channel?: string | null;
   models_endpoint?: string | null;
+  models_source?: string | null;
+  capabilities_source?: string | null;
   static_models?: string | null;
   api_key: string;
   is_active: boolean;

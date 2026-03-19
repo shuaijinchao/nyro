@@ -2,7 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { backend } from "@/lib/backend";
 import { localizeBackendErrorMessage } from "@/lib/backend-error";
-import type { Provider, CreateProvider, UpdateProvider, TestResult } from "@/lib/types";
+import type {
+  Provider,
+  CreateProvider,
+  UpdateProvider,
+  TestResult,
+  ProviderPreset,
+  ProviderChannelPreset,
+  ProviderProtocol,
+} from "@/lib/types";
 import {
   Server,
   Plus,
@@ -17,6 +25,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Info,
 } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
 import { ProviderIcon } from "@/components/ui/provider-icon";
@@ -40,30 +49,7 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-
-type ProviderProtocol = "openai" | "anthropic" | "gemini";
-
-type ProviderChannelPreset = {
-  id: string;
-  label: {
-    zh: string;
-    en: string;
-  };
-  baseUrls: Partial<Record<ProviderProtocol, string>>;
-  modelsEndpoint?: string;
-  staticModels?: string[];
-};
-
-type ProviderPreset = {
-  id: string;
-  label: {
-    zh: string;
-    en: string;
-  };
-  iconName?: string;
-  defaultProtocol: ProviderProtocol;
-  channels?: ProviderChannelPreset[];
-};
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 function protocolUrl(protocol: string) {
   switch (protocol) {
@@ -81,6 +67,8 @@ const emptyCreate: CreateProvider = {
   preset_key: "",
   channel: "",
   models_endpoint: "",
+  models_source: "",
+  capabilities_source: "",
   static_models: "",
   api_key: "",
 };
@@ -90,213 +78,42 @@ const protocolOptions = [
   { label: "OpenAI", value: "openai" },
   { label: "Anthropic", value: "anthropic" },
   { label: "Gemini", value: "gemini" },
-];
-const providerPresets: ProviderPreset[] = [
-  {
-    id: "custom",
-    label: { zh: "自定义", en: "Custom" },
-    defaultProtocol: "openai",
-    channels: [],
-  },
-  {
-    id: "openai",
-    label: { zh: "OpenAI", en: "OpenAI" },
-    iconName: "openai",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: { openai: "https://api.openai.com/v1" },
-      },
-    ],
-  },
-  {
-    id: "anthropic",
-    label: { zh: "Anthropic", en: "Anthropic" },
-    iconName: "anthropic",
-    defaultProtocol: "anthropic",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          anthropic: "https://api.anthropic.com",
-        },
-      },
-    ],
-  },
-  {
-    id: "google",
-    label: { zh: "Google", en: "Google" },
-    iconName: "google",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://generativelanguage.googleapis.com/v1beta/openai",
-          gemini: "https://generativelanguage.googleapis.com",
-        },
-      },
-    ],
-  },
-  {
-    id: "xai",
-    label: { zh: "xAI", en: "xAI" },
-    iconName: "xai",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://api.x.ai/v1",
-        },
-      },
-    ],
-  },
-  {
-    id: "deepseek",
-    label: { zh: "DeepSeek", en: "DeepSeek" },
-    iconName: "deepseek",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://api.deepseek.com/v1",
-          anthropic: "https://api.deepseek.com/anthropic",
-        },
-      },
-    ],
-  },
-  {
-    id: "kimi",
-    label: { zh: "Kimi", en: "Kimi" },
-    iconName: "kimi",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://api.moonshot.ai/v1",
-          anthropic: "https://api.moonshot.ai/anthropic",
-        },
-      },
-      {
-        id: "china",
-        label: { zh: "中国站", en: "China" },
-        baseUrls: {
-          openai: "https://api.moonshot.cn/v1",
-          anthropic: "https://api.moonshot.cn/anthropic",
-        },
-      },
-    ],
-  },
-  {
-    id: "minimax",
-    label: { zh: "MiniMax", en: "MiniMax" },
-    iconName: "minimax",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://api.minimax.io/v1",
-          anthropic: "https://api.minimax.io/anthropic",
-        },
-        modelsEndpoint: "",
-        staticModels: [],
-      },
-      {
-        id: "china",
-        label: { zh: "中国站", en: "China" },
-        baseUrls: {
-          openai: "https://api.minimaxi.com/v1",
-          anthropic: "https://api.minimaxi.com/anthropic",
-        },
-        modelsEndpoint: "",
-        staticModels: [],
-      },
-    ],
-  },
-  {
-    id: "zhipu",
-    label: { zh: "Zhipu", en: "Zhipu" },
-    iconName: "zhipu",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://api.z.ai/api/paas/v4",
-          anthropic: "https://api.z.ai/api/anthropic",
-        },
-      },
-      {
-        id: "china",
-        label: { zh: "中国站", en: "China" },
-        baseUrls: {
-          openai: "https://open.bigmodel.cn/api/paas/v4",
-          anthropic: "https://open.bigmodel.cn/api/anthropic",
-        },
-      },
-    ],
-  },
-  {
-    id: "nvidia",
-    label: { zh: "NVIDIA", en: "NVIDIA" },
-    iconName: "nvidia",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://integrate.api.nvidia.com/v1",
-        },
-      },
-    ],
-  },
-  {
-    id: "openrouter",
-    label: { zh: "OpenRouter", en: "OpenRouter" },
-    iconName: "openrouter",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "https://openrouter.ai/api/v1",
-          anthropic: "https://openrouter.ai/api",
-        },
-        modelsEndpoint: "https://openrouter.ai/api/v1/models",
-      },
-    ],
-  },
-  {
-    id: "ollama",
-    label: { zh: "Ollama", en: "Ollama" },
-    iconName: "ollama",
-    defaultProtocol: "openai",
-    channels: [
-      {
-        id: "default",
-        label: { zh: "默认", en: "Default" },
-        baseUrls: {
-          openai: "http://127.0.0.1:11434/v1",
-        },
-      },
-    ],
-  },
-];
+] as const satisfies ReadonlyArray<{ label: string; value: ProviderProtocol }>;
+
+function availableProtocolsForPreset(
+  preset?: ProviderPreset | null,
+  channelId?: string,
+): ProviderProtocol[] {
+  if (!preset || preset.id === DEFAULT_PRESET_ID) {
+    return protocolOptions.map((item) => item.value);
+  }
+
+  const byChannel = preset.channels?.find((channel) => channel.id === channelId);
+  const collectKeys = (channels: ProviderChannelPreset[]) =>
+    channels.flatMap((channel) => Object.keys(channel.baseUrls ?? {}));
+
+  const protocolKeys = byChannel
+    ? Object.keys(byChannel.baseUrls ?? {})
+    : collectKeys(preset.channels ?? []);
+
+  const known = new Set(protocolOptions.map((item) => item.value));
+  const filtered = protocolKeys.filter((key): key is ProviderProtocol =>
+    known.has(key as ProviderProtocol),
+  );
+
+  return filtered.length ? filtered : protocolOptions.map((item) => item.value);
+}
+
+function resolvePresetProtocol(
+  preset: ProviderPreset,
+  channelId?: string,
+  preferred?: ProviderProtocol,
+): ProviderProtocol {
+  const available = availableProtocolsForPreset(preset, channelId);
+  if (preferred && available.includes(preferred)) return preferred;
+  if (available.includes(preset.defaultProtocol)) return preset.defaultProtocol;
+  return available[0] ?? preset.defaultProtocol;
+}
 
 function presetLabel(preset: ProviderPreset, isZh: boolean) {
   return isZh ? preset.label.zh : preset.label.en;
@@ -306,11 +123,8 @@ function channelLabel(channel: ProviderChannelPreset, isZh: boolean) {
   return isZh ? channel.label.zh : channel.label.en;
 }
 
-function toGatewayBaseUrl(url: string, protocol: ProviderProtocol) {
+function toGatewayBaseUrl(url: string) {
   const normalized = url.trim().replace(/\/+$/, "");
-  if (protocol === "openai") {
-    return normalized.replace(/\/v1$/, "");
-  }
   return normalized;
 }
 
@@ -359,6 +173,15 @@ function fallbackChannelPreset(): ProviderChannelPreset {
   };
 }
 
+function fallbackProviderPreset(): ProviderPreset {
+  return {
+    id: DEFAULT_PRESET_ID,
+    label: { zh: "自定义", en: "Custom" },
+    defaultProtocol: "openai",
+    channels: [],
+  };
+}
+
 function presetChannels(preset?: ProviderPreset | null) {
   return preset?.channels?.length ? preset.channels : [fallbackChannelPreset()];
 }
@@ -370,21 +193,42 @@ function resolvePresetConfig(
 ) {
   const channel = presetChannels(preset).find((item) => item.id === channelId) ?? presetChannels(preset)[0];
   const sourceBaseUrls = channel?.baseUrls ?? {};
-  const rawBaseUrl = sourceBaseUrls[protocol] ?? protocolUrl(protocol);
-  const baseUrl = rawBaseUrl ? toGatewayBaseUrl(rawBaseUrl, protocol) : protocolUrl(protocol);
-  const modelsEndpoint = channel?.modelsEndpoint ?? defaultModelsEndpoint(baseUrl, protocol);
+  const rawBaseUrl = sourceBaseUrls[protocol];
+  const baseUrl = rawBaseUrl ? toGatewayBaseUrl(rawBaseUrl) : "";
+  const modelsSource = channel?.modelsSource ?? channel?.modelsEndpoint ?? "";
+  const capabilitiesSource = channel?.capabilitiesSource ?? "";
   const staticModels = joinStaticModels(channel?.staticModels);
 
   return {
     baseUrl,
-    modelsEndpoint,
+    modelsSource,
+    capabilitiesSource,
     staticModels,
     channel,
   };
 }
 
-function FieldLabel({ children }: { children: string }) {
-  return <label className="ml-1 text-xs leading-none font-normal text-slate-900">{children}</label>;
+function FieldLabel({ children, info }: { children: string; info?: string }) {
+  return (
+    <label className="ml-1 inline-flex items-center gap-1 text-xs leading-none font-normal text-slate-900">
+      <span>{children}</span>
+      {info ? (
+        <TooltipProvider delayDuration={120}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex cursor-help text-slate-400 hover:text-slate-600"
+                aria-label={info}
+              >
+                <Info className="h-3.5 w-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{info}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
+    </label>
+  );
 }
 
 type TestLogLevel = "info" | "success" | "error";
@@ -464,12 +308,25 @@ export default function ProvidersPage() {
     queryKey: ["providers"],
     queryFn: () => backend("get_providers"),
   });
+  const { data: providerPresetsRaw = [] } = useQuery<ProviderPreset[]>({
+    queryKey: ["provider-presets"],
+    queryFn: () => backend("get_provider_presets"),
+  });
+  const providerPresets = useMemo(
+    () => (providerPresetsRaw.length ? providerPresetsRaw : [fallbackProviderPreset()]),
+    [providerPresetsRaw],
+  );
 
   const [form, setForm] = useState<CreateProvider>(emptyCreate);
   const selectedPreset = useMemo(
     () => providerPresets.find((preset) => preset.id === selectedPresetId) ?? null,
-    [selectedPresetId],
+    [providerPresets, selectedPresetId],
   );
+  useEffect(() => {
+    if (providerPresets.some((preset) => preset.id === selectedPresetId)) return;
+    setSelectedPresetId(providerPresets[0]?.id ?? DEFAULT_PRESET_ID);
+  }, [providerPresets, selectedPresetId]);
+
   const [editForm, setEditForm] = useState<UpdateProvider & { id: string }>({
     id: "",
     name: "",
@@ -479,6 +336,8 @@ export default function ProvidersPage() {
     preset_key: "",
     channel: "",
     models_endpoint: "",
+    models_source: "",
+    capabilities_source: "",
     static_models: "",
     api_key: "",
   });
@@ -615,18 +474,18 @@ export default function ProvidersPage() {
         `${isZh ? "✓ 连接成功，响应" : "✓ Connectivity ok, latency"} ${connectivity.latency_ms}ms`,
       );
 
-      const modelsEndpoint = provider.models_endpoint?.trim();
-      if (!modelsEndpoint) {
+      const modelsSource = provider.models_source?.trim() || provider.models_endpoint?.trim();
+      if (!modelsSource) {
         finish(
           { success: true, latency_ms: connectivity.latency_ms, model: undefined, error: undefined },
-          isZh ? "✓ 未配置 Model Discovery URL，测试完成" : "✓ Model Discovery URL not configured, test finished",
+          isZh ? "✓ 未配置模型发现源，测试完成" : "✓ Model discovery source not configured, test finished",
           "success",
         );
         return;
       }
 
       appendTestLog("info", isZh ? "▶ 获取模型列表" : "▶ Fetch model list");
-      appendTestLog("info", `→ ${modelsEndpoint}`);
+      appendTestLog("info", `→ ${modelsSource}`);
 
       const models = await backend<string[]>("test_provider_models", { id: provider.id });
       if (isCanceled()) return;
@@ -684,6 +543,8 @@ export default function ProvidersPage() {
       preset_key: p.preset_key || DEFAULT_PRESET_ID,
       channel: p.channel || "default",
       models_endpoint: p.models_endpoint ?? "",
+      models_source: p.models_source ?? p.models_endpoint ?? "",
+      capabilities_source: p.capabilities_source ?? "",
       static_models: p.static_models ?? "",
       api_key: p.api_key ?? "",
     });
@@ -695,44 +556,40 @@ export default function ProvidersPage() {
     const preset = providerPresets.find((item) => item.id === nextPresetId);
     if (!preset) return;
 
-    if (preset.id === "custom") {
-      setForm({
-        ...emptyCreate,
-        name: "",
-        vendor: undefined,
-        protocol: "openai",
-        base_url: "",
-        preset_key: DEFAULT_PRESET_ID,
-        channel: "default",
-      });
-      return;
-    }
-
     const nextChannelId = preset.channels?.[0]?.id ?? "";
-    const config = resolvePresetConfig(preset, preset.defaultProtocol, nextChannelId);
+    const nextProtocol = resolvePresetProtocol(preset, nextChannelId, preset.defaultProtocol);
+    const config = resolvePresetConfig(preset, nextProtocol, nextChannelId);
 
     setForm((prev) => ({
       ...prev,
-      name: preset.label.en,
-      vendor: preset.id,
-      protocol: preset.defaultProtocol,
+      vendor: preset.id === DEFAULT_PRESET_ID ? undefined : preset.id,
+      protocol: nextProtocol,
       base_url: config.baseUrl,
       preset_key: preset.id,
       channel: nextChannelId,
-      models_endpoint: config.modelsEndpoint,
+      models_source: config.modelsSource,
+      models_endpoint: config.modelsSource,
+      capabilities_source: config.capabilitiesSource,
       static_models: config.staticModels,
     }));
   }
 
   function handlePresetChannelChange(nextChannelId: string) {
     if (!selectedPreset) return;
-    const nextProtocol = form.protocol as ProviderProtocol;
+    const nextProtocol = resolvePresetProtocol(
+      selectedPreset,
+      nextChannelId,
+      form.protocol as ProviderProtocol,
+    );
     const config = resolvePresetConfig(selectedPreset, nextProtocol, nextChannelId);
     setForm((prev) => ({
       ...prev,
       channel: nextChannelId,
+      protocol: nextProtocol,
       base_url: config.baseUrl,
-      models_endpoint: config.modelsEndpoint,
+      models_source: config.modelsSource,
+      models_endpoint: config.modelsSource,
+      capabilities_source: config.capabilitiesSource,
       static_models: config.staticModels,
     }));
   }
@@ -742,18 +599,15 @@ export default function ProvidersPage() {
     const preset = providerPresets.find((item) => item.id === nextPresetId);
     if (!preset) return;
 
-    if (preset.id === DEFAULT_PRESET_ID) {
-      setEditForm((prev) =>
-        prev ? { ...prev, vendor: undefined, preset_key: DEFAULT_PRESET_ID, channel: "default" } : prev,
-      );
-      return;
-    }
-
     const nextChannelId = preset.channels?.[0]?.id ?? "";
     setEditForm((prev) =>
       prev
         ? (() => {
-            const nextProtocol = (prev.protocol as ProviderProtocol) || preset.defaultProtocol;
+            const nextProtocol = resolvePresetProtocol(
+              preset,
+              nextChannelId,
+              (prev.protocol as ProviderProtocol) || preset.defaultProtocol,
+            );
             const config = resolvePresetConfig(preset, nextProtocol, nextChannelId);
             return {
               ...prev,
@@ -762,7 +616,9 @@ export default function ProvidersPage() {
               channel: nextChannelId,
               protocol: nextProtocol,
               base_url: config.baseUrl,
-              models_endpoint: config.modelsEndpoint,
+              models_source: config.modelsSource,
+              models_endpoint: config.modelsSource,
+              capabilities_source: config.capabilitiesSource,
               static_models: config.staticModels,
             };
           })()
@@ -784,6 +640,9 @@ export default function ProvidersPage() {
     selectedPreset?.channels?.length
       ? (form.channel || createChannelOptions[0]?.id || "")
       : (createChannelOptions[0]?.id ?? "default");
+  const createProtocolOptions = protocolOptions.filter((option) =>
+    availableProtocolsForPreset(selectedPreset, createChannelValue).includes(option.value),
+  );
 
   useEffect(() => {
     if (page > totalPages - 1) {
@@ -854,8 +713,8 @@ export default function ProvidersPage() {
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 {isZh
-                  ? "选择后会自动填充协议与 Base URL，后续仍可继续修改。"
-                  : "Selecting a preset will prefill protocol and base URL, and you can still edit them."}
+                  ? "选择预设后会自动填充默认配置，后续可继续手动修改。"
+                  : "Selecting a preset prefills default values, and you can still edit them."}
               </p>
             </div>
             <ToggleGroup
@@ -875,7 +734,7 @@ export default function ProvidersPage() {
                   className="provider-preset-card h-auto w-full flex-col gap-3 px-4 py-5"
                   aria-label={presetLabel(preset, isZh)}
                 >
-                  {preset.id === "custom" ? (
+                  {preset.icon === "nyro" ? (
                     <>
                       <NyroIcon
                         size={26}
@@ -890,12 +749,12 @@ export default function ProvidersPage() {
                   ) : (
                     <>
                       <ProviderIcon
-                        name={preset.iconName ?? preset.label.en}
+                        name={preset.icon ?? preset.label.en}
                         size={26}
                         className="provider-preset-icon provider-preset-icon-colored rounded-none border-0 bg-transparent"
                       />
                       <ProviderIcon
-                        name={preset.iconName ?? preset.label.en}
+                        name={preset.icon ?? preset.label.en}
                         size={26}
                         monochrome
                         className="provider-preset-icon provider-preset-icon-mono rounded-none border-0 bg-transparent"
@@ -965,14 +824,23 @@ export default function ProvidersPage() {
                       ? resolvePresetConfig(selectedPreset, nextProtocol, form.channel)
                       : {
                           baseUrl: protocolUrl(nextProtocol),
-                          modelsEndpoint: defaultModelsEndpoint(protocolUrl(nextProtocol), nextProtocol),
+                          modelsSource: defaultModelsEndpoint(protocolUrl(nextProtocol), nextProtocol),
+                          capabilitiesSource: "",
                           staticModels: form.static_models ?? "",
                         };
+                    const nextBaseUrl =
+                      selectedPreset && selectedPreset.id !== DEFAULT_PRESET_ID
+                        ? (config.baseUrl || form.base_url)
+                        : config.baseUrl;
                     setForm({
                       ...form,
                       protocol: nextProtocol,
-                      base_url: config.baseUrl,
-                      models_endpoint: config.modelsEndpoint,
+                      base_url: nextBaseUrl,
+                      // models_source should be filled by preset selection,
+                      // and should not be auto-updated when only protocol changes.
+                      models_source: form.models_source,
+                      models_endpoint: form.models_source,
+                      capabilities_source: config.capabilitiesSource,
                       static_models: config.staticModels,
                     });
                   }}
@@ -981,7 +849,7 @@ export default function ProvidersPage() {
                     <SelectValue placeholder={isZh ? "选择协议" : "Select protocol"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {protocolOptions.map((option) => (
+                    {createProtocolOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
@@ -995,14 +863,6 @@ export default function ProvidersPage() {
                   placeholder={isZh ? "输入上游基础地址" : "Enter upstream base URL"}
                   value={form.base_url}
                   onChange={(e) => setForm({ ...form, base_url: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <FieldLabel>Model Discovery URL</FieldLabel>
-                <Input
-                  placeholder={isZh ? "可选，用于自动获取模型列表" : "Optional, used to auto-discover models"}
-                  value={form.models_endpoint ?? ""}
-                  onChange={(e) => setForm({ ...form, models_endpoint: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -1024,6 +884,38 @@ export default function ProvidersPage() {
                     {showCreateApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <FieldLabel
+                  info={
+                    isZh
+                      ? "用于创建路由时自动获取可用模型列表"
+                      : "Used to auto-fetch available model list when creating routes"
+                  }
+                >
+                  {isZh ? "模型发现源" : "Model Discovery Source"}
+                </FieldLabel>
+                <Input
+                  placeholder={isZh ? "可选，支持 https:// 或 ai://models.dev/..." : "Optional, supports https:// or ai://models.dev/..."}
+                  value={form.models_source ?? form.models_endpoint ?? ""}
+                  onChange={(e) => setForm({ ...form, models_source: e.target.value, models_endpoint: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel
+                  info={
+                    isZh
+                      ? "用于识别模型能力，自动处理请求转发与 CLI 配置生成"
+                      : "Used to identify model capabilities and auto-handle forwarding and CLI config generation"
+                  }
+                >
+                  {isZh ? "能力发现源" : "Capability Discovery Source"}
+                </FieldLabel>
+                <Input
+                  placeholder={isZh ? "可选，支持 https:// 或 ai://models.dev/..." : "Optional, supports https:// or ai://models.dev/..."}
+                  value={form.capabilities_source ?? ""}
+                  onChange={(e) => setForm({ ...form, capabilities_source: e.target.value })}
+                />
               </div>
             </div>
             <div className="flex gap-3">
@@ -1069,6 +961,9 @@ export default function ProvidersPage() {
                 editingPreset?.channels?.length
                   ? (editForm.channel || editingChannelOptions[0]?.id || "")
                   : (editingChannelOptions[0]?.id ?? "default");
+              const editingProtocolOptions = protocolOptions.filter((option) =>
+                availableProtocolsForPreset(editingPreset, editingChannelValue).includes(option.value),
+              );
               return (
                 <div key={p.id} className="glass rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
@@ -1098,7 +993,7 @@ export default function ProvidersPage() {
                           className="provider-preset-card h-auto w-full flex-col gap-3 px-4 py-5"
                           aria-label={presetLabel(preset, isZh)}
                         >
-                          {preset.id === "custom" ? (
+                          {preset.icon === "nyro" ? (
                             <>
                               <NyroIcon
                                 size={26}
@@ -1113,12 +1008,12 @@ export default function ProvidersPage() {
                           ) : (
                             <>
                               <ProviderIcon
-                                name={preset.iconName ?? preset.label.en}
+                                name={preset.icon ?? preset.label.en}
                                 size={26}
                                 className="provider-preset-icon provider-preset-icon-colored rounded-none border-0 bg-transparent"
                               />
                               <ProviderIcon
-                                name={preset.iconName ?? preset.label.en}
+                                name={preset.icon ?? preset.label.en}
                                 size={26}
                                 monochrome
                                 className="provider-preset-icon provider-preset-icon-mono rounded-none border-0 bg-transparent"
@@ -1140,14 +1035,25 @@ export default function ProvidersPage() {
                           if (!value || !editingPreset?.channels?.length) return;
                           const config = resolvePresetConfig(
                             editingPreset,
-                            (editForm.protocol as ProviderProtocol) || editingPreset.defaultProtocol,
+                            resolvePresetProtocol(
+                              editingPreset,
+                              value,
+                              (editForm.protocol as ProviderProtocol) || editingPreset.defaultProtocol,
+                            ),
                             value,
                           );
                           setEditForm({
                             ...editForm,
                             channel: value,
+                            protocol: resolvePresetProtocol(
+                              editingPreset,
+                              value,
+                              (editForm.protocol as ProviderProtocol) || editingPreset.defaultProtocol,
+                            ),
                             base_url: config.baseUrl,
-                            models_endpoint: config.modelsEndpoint,
+                            models_source: config.modelsSource,
+                            models_endpoint: config.modelsSource,
+                            capabilities_source: config.capabilitiesSource,
                             static_models: config.staticModels,
                           });
                         }}
@@ -1184,14 +1090,23 @@ export default function ProvidersPage() {
                             ? resolvePresetConfig(editingPreset, nextProtocol, editForm.channel ?? undefined)
                             : {
                                 baseUrl: protocolUrl(nextProtocol),
-                                modelsEndpoint: defaultModelsEndpoint(protocolUrl(nextProtocol), nextProtocol),
+                                modelsSource: defaultModelsEndpoint(protocolUrl(nextProtocol), nextProtocol),
+                                capabilitiesSource: "",
                                 staticModels: editForm.static_models ?? "",
                               };
+                          const nextBaseUrl =
+                            editingPreset && editingPreset.id !== DEFAULT_PRESET_ID
+                              ? (config.baseUrl || editForm.base_url || "")
+                              : config.baseUrl;
                           setEditForm({
                             ...editForm,
                             protocol: nextProtocol,
-                            base_url: config.baseUrl,
-                            models_endpoint: config.modelsEndpoint,
+                            base_url: nextBaseUrl,
+                            // Keep user/preset selected model discovery source stable
+                            // when protocol changes.
+                            models_source: editForm.models_source,
+                            models_endpoint: editForm.models_source,
+                            capabilities_source: config.capabilitiesSource,
                             static_models: config.staticModels,
                           });
                         }}
@@ -1200,7 +1115,7 @@ export default function ProvidersPage() {
                           <SelectValue placeholder={isZh ? "选择协议" : "Select protocol"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {protocolOptions.map((option) => (
+                          {editingProtocolOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
                             </SelectItem>
@@ -1214,14 +1129,6 @@ export default function ProvidersPage() {
                         placeholder={isZh ? "输入上游基础地址" : "Enter upstream base URL"}
                         value={editForm.base_url ?? ""}
                         onChange={(e) => setEditForm({ ...editForm, base_url: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <FieldLabel>Model Discovery URL</FieldLabel>
-                      <Input
-                        placeholder={isZh ? "可选，用于自动获取模型列表" : "Optional, used to auto-discover models"}
-                        value={editForm.models_endpoint ?? ""}
-                        onChange={(e) => setEditForm({ ...editForm, models_endpoint: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1244,6 +1151,38 @@ export default function ProvidersPage() {
                         </button>
                       </div>
                     </div>
+                    <div className="space-y-2">
+                      <FieldLabel
+                        info={
+                          isZh
+                            ? "用于创建路由时自动获取可用模型列表"
+                            : "Used to auto-fetch available model list when creating routes"
+                        }
+                      >
+                        {isZh ? "模型发现源" : "Model Discovery Source"}
+                      </FieldLabel>
+                      <Input
+                        placeholder={isZh ? "可选，支持 https:// 或 ai://models.dev/..." : "Optional, supports https:// or ai://models.dev/..."}
+                        value={editForm.models_source ?? editForm.models_endpoint ?? ""}
+                        onChange={(e) => setEditForm({ ...editForm, models_source: e.target.value, models_endpoint: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <FieldLabel
+                        info={
+                          isZh
+                            ? "用于识别模型能力，自动处理请求转发与 CLI 配置生成"
+                            : "Used to identify model capabilities and auto-handle forwarding and CLI config generation"
+                        }
+                      >
+                        {isZh ? "能力发现源" : "Capability Discovery Source"}
+                      </FieldLabel>
+                      <Input
+                        placeholder={isZh ? "可选，支持 https:// 或 ai://models.dev/..." : "Optional, supports https:// or ai://models.dev/..."}
+                        value={editForm.capabilities_source ?? ""}
+                        onChange={(e) => setEditForm({ ...editForm, capabilities_source: e.target.value })}
+                      />
+                    </div>
                   </div>
                   <div className="flex gap-3">
                     <Button
@@ -1257,6 +1196,8 @@ export default function ProvidersPage() {
                           preset_key: editForm.preset_key || undefined,
                           channel: editForm.channel || undefined,
                           models_endpoint: editForm.models_endpoint || undefined,
+                          models_source: editForm.models_source || undefined,
+                          capabilities_source: editForm.capabilities_source || undefined,
                           static_models: editForm.static_models || undefined,
                           api_key: editForm.api_key || undefined,
                         };
