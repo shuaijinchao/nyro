@@ -11,9 +11,16 @@ pub struct Provider {
     pub preset_key: Option<String>,
     #[serde(alias = "region")]
     pub channel: Option<String>,
+    /// Deprecated compatibility field. Use models_source.
     pub models_endpoint: Option<String>,
+    #[serde(alias = "modelsEndpoint")]
+    pub models_source: Option<String>,
+    #[serde(alias = "capabilitiesSource")]
+    pub capabilities_source: Option<String>,
     pub static_models: Option<String>,
     pub api_key: String,
+    pub last_test_success: Option<bool>,
+    pub last_test_at: Option<String>,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -93,7 +100,12 @@ pub struct CreateProvider {
     pub preset_key: Option<String>,
     #[serde(alias = "region")]
     pub channel: Option<String>,
+    /// Deprecated compatibility field. Use models_source.
     pub models_endpoint: Option<String>,
+    #[serde(alias = "modelsSource")]
+    pub models_source: Option<String>,
+    #[serde(alias = "capabilitiesSource")]
+    pub capabilities_source: Option<String>,
     pub static_models: Option<String>,
     pub api_key: String,
 }
@@ -107,7 +119,12 @@ pub struct UpdateProvider {
     pub preset_key: Option<String>,
     #[serde(alias = "region")]
     pub channel: Option<String>,
+    /// Deprecated compatibility field. Use models_source.
     pub models_endpoint: Option<String>,
+    #[serde(alias = "modelsSource")]
+    pub models_source: Option<String>,
+    #[serde(alias = "capabilitiesSource")]
+    pub capabilities_source: Option<String>,
     pub static_models: Option<String>,
     pub api_key: Option<String>,
     pub is_active: Option<bool>,
@@ -219,6 +236,20 @@ pub struct TestResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelCapabilities {
+    pub provider: String,
+    pub model_id: String,
+    pub context_window: u64,
+    pub output_max_tokens: Option<u64>,
+    pub tool_call: bool,
+    pub reasoning: bool,
+    pub input_modalities: Vec<String>,
+    pub output_modalities: Vec<String>,
+    pub input_cost: Option<f64>,
+    pub output_cost: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportData {
     pub version: u32,
     pub providers: Vec<ExportProvider>,
@@ -235,7 +266,12 @@ pub struct ExportProvider {
     pub preset_key: Option<String>,
     #[serde(alias = "region")]
     pub channel: Option<String>,
+    /// Deprecated compatibility field. Use models_source.
     pub models_endpoint: Option<String>,
+    #[serde(alias = "modelsEndpoint")]
+    pub models_source: Option<String>,
+    #[serde(alias = "capabilitiesSource")]
+    pub capabilities_source: Option<String>,
     pub static_models: Option<String>,
     pub api_key: String,
     pub is_active: bool,
@@ -264,4 +300,31 @@ pub struct ImportResult {
 
 fn default_ingress_protocol() -> String {
     "openai".to_string()
+}
+
+impl Provider {
+    pub fn effective_models_source(&self) -> Option<&str> {
+        self.models_source
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| self.models_endpoint.as_deref().filter(|v| !v.trim().is_empty()))
+    }
+}
+
+impl CreateProvider {
+    pub fn effective_models_source(&self) -> Option<&str> {
+        self.models_source
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| self.models_endpoint.as_deref().filter(|v| !v.trim().is_empty()))
+    }
+}
+
+impl UpdateProvider {
+    pub fn effective_models_source(&self) -> Option<&str> {
+        self.models_source
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| self.models_endpoint.as_deref().filter(|v| !v.trim().is_empty()))
+    }
 }

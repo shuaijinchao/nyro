@@ -52,11 +52,13 @@ pub fn create_router(gateway: Gateway, admin_key: Option<String>) -> Router {
         .delete(delete_api_key_handler);
 
     let mut api = Router::new()
+        .route("/providers/presets", get(list_provider_presets))
         .route("/providers", get(list_providers).post(create_provider_handler))
         .route("/providers/:id", providers_item)
         .route("/providers/:id/test", get(test_provider_handler))
         .route("/providers/:id/test-models", get(test_provider_models_handler))
         .route("/providers/:id/models", get(provider_models_handler))
+        .route("/providers/:id/model-capabilities", get(provider_model_capabilities_handler))
         .route("/routes", get(list_routes_handler).post(create_route_handler))
         .route("/routes/:id", routes_item)
         .route("/api-keys", get(list_api_keys_handler).post(create_api_key_handler))
@@ -87,6 +89,13 @@ pub fn create_router(gateway: Gateway, admin_key: Option<String>) -> Router {
 
 async fn list_providers(State(gw): State<Gateway>) -> impl IntoResponse {
     match gw.admin().list_providers().await {
+        Ok(v) => Json(serde_json::json!({ "data": v })).into_response(),
+        Err(e) => err(e),
+    }
+}
+
+async fn list_provider_presets(State(gw): State<Gateway>) -> impl IntoResponse {
+    match gw.admin().list_provider_presets().await {
         Ok(v) => Json(serde_json::json!({ "data": v })).into_response(),
         Err(e) => err(e),
     }
@@ -161,6 +170,22 @@ async fn provider_models_handler(
         Ok(v) => Json(serde_json::json!({ "data": v })).into_response(),
         Err(e) => err(e),
     }
+}
+
+async fn provider_model_capabilities_handler(
+    State(gw): State<Gateway>,
+    Path(id): Path<String>,
+    Query(query): Query<ModelCapabilitiesQuery>,
+) -> impl IntoResponse {
+    match gw.admin().get_model_capabilities(&id, &query.model).await {
+        Ok(v) => Json(serde_json::json!({ "data": v })).into_response(),
+        Err(e) => err(e),
+    }
+}
+
+#[derive(Deserialize)]
+struct ModelCapabilitiesQuery {
+    model: String,
 }
 
 // ── Routes ──

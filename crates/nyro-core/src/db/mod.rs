@@ -31,7 +31,11 @@ pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     ensure_provider_column(pool, "region", "TEXT").await?;
     ensure_provider_column(pool, "channel", "TEXT").await?;
     ensure_provider_column(pool, "models_endpoint", "TEXT").await?;
+    ensure_provider_column(pool, "models_source", "TEXT").await?;
+    ensure_provider_column(pool, "capabilities_source", "TEXT").await?;
     ensure_provider_column(pool, "static_models", "TEXT").await?;
+    ensure_provider_column(pool, "last_test_success", "INTEGER").await?;
+    ensure_provider_column(pool, "last_test_at", "TEXT").await?;
     ensure_route_column(pool, "ingress_protocol", "TEXT").await?;
     ensure_route_column(pool, "virtual_model", "TEXT").await?;
     ensure_route_column(pool, "access_control", "INTEGER DEFAULT 0").await?;
@@ -40,6 +44,7 @@ pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     ensure_api_key_column(pool, "rpd", "INTEGER").await?;
     backfill_provider_channel(pool).await?;
     backfill_provider_vendor(pool).await?;
+    backfill_provider_models_source(pool).await?;
     backfill_route_fields(pool).await?;
     Ok(())
 }
@@ -63,6 +68,23 @@ async fn backfill_provider_vendor(pool: &SqlitePool) -> anyhow::Result<()> {
                AND preset_key IS NOT NULL \
                AND trim(preset_key) != '' \
                AND lower(trim(preset_key)) != 'custom'",
+        )
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn backfill_provider_models_source(pool: &SqlitePool) -> anyhow::Result<()> {
+    if column_exists(pool, "providers", "models_source").await?
+        && column_exists(pool, "providers", "models_endpoint").await?
+    {
+        sqlx::query(
+            "UPDATE providers \
+             SET models_source = models_endpoint \
+             WHERE (models_source IS NULL OR trim(models_source) = '') \
+               AND models_endpoint IS NOT NULL \
+               AND trim(models_endpoint) != ''",
         )
         .execute(pool)
         .await?;
@@ -202,8 +224,12 @@ CREATE TABLE IF NOT EXISTS providers (
     region      TEXT,
     channel     TEXT,
     models_endpoint TEXT,
+    models_source TEXT,
+    capabilities_source TEXT,
     static_models TEXT,
     api_key     TEXT NOT NULL,
+    last_test_success INTEGER,
+    last_test_at TEXT,
     is_active   INTEGER DEFAULT 1,
     priority    INTEGER DEFAULT 0,
     created_at  TEXT DEFAULT (datetime('now')),

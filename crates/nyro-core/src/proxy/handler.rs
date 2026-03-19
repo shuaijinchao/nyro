@@ -721,7 +721,7 @@ fn extract_api_key(headers: &HeaderMap) -> Option<String> {
 
 async fn get_provider(gw: &Gateway, id: &str) -> anyhow::Result<Provider> {
     sqlx::query_as::<_, Provider>(
-        "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at \
+        "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, COALESCE(models_source, models_endpoint) AS models_source, capabilities_source, static_models, api_key, last_test_success, last_test_at, is_active, created_at, updated_at \
          FROM providers WHERE id = ? AND is_active = 1",
     )
     .bind(id)

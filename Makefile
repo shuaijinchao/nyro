@@ -1,9 +1,8 @@
 .PHONY: dev build server check clean webui smoke release-check help
 
 # Development — start Tauri desktop app with hot reload
-dev:
-	cd webui && pnpm install
-	cargo tauri dev
+dev: webui-build
+	cargo tauri build --config src-tauri/tauri.dev.conf.json
 
 # Build desktop app (release)
 build: webui-build

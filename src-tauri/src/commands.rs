@@ -20,6 +20,14 @@ pub async fn get_provider(gw: State<'_, Gateway>, id: String) -> Result<Provider
 }
 
 #[tauri::command]
+pub async fn get_provider_presets(gw: State<'_, Gateway>) -> Result<Vec<serde_json::Value>, String> {
+    gw.admin()
+        .list_provider_presets()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn create_provider(
     gw: State<'_, Gateway>,
     input: CreateProvider,
@@ -61,6 +69,18 @@ pub async fn get_provider_models(
 ) -> Result<Vec<String>, String> {
     gw.admin()
         .get_provider_models(&id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_model_capabilities(
+    gw: State<'_, Gateway>,
+    provider_id: String,
+    model: String,
+) -> Result<ModelCapabilities, String> {
+    gw.admin()
+        .get_model_capabilities(&provider_id, &model)
         .await
         .map_err(|e| e.to_string())
 }
@@ -247,6 +267,10 @@ fn get_codex_auth_path(home_dir: &Path) -> PathBuf {
 
 fn get_codex_config_path(home_dir: &Path) -> PathBuf {
     home_dir.join(".codex").join("config.toml")
+}
+
+fn get_codex_models_path(home_dir: &Path) -> PathBuf {
+    home_dir.join(".codex").join("nyro-models.json")
 }
 
 fn get_gemini_env_path(home_dir: &Path) -> PathBuf {
@@ -493,6 +517,12 @@ fn update_gemini_selected_type(settings_path: &Path, selected_type: &str) -> Res
     write_json_file(settings_path, &settings)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CliModelCapabilities {
+    pub context_window: Option<u64>,
+    pub reasoning: Option<bool>,
+}
+
 #[tauri::command]
 pub async fn sync_cli_config(
     app: tauri::AppHandle,
@@ -500,6 +530,7 @@ pub async fn sync_cli_config(
     host: String,
     api_key: String,
     model: String,
+    capabilities: Option<CliModelCapabilities>,
 ) -> Result<Vec<String>, String> {
     let home_dir = resolve_home_dir().ok_or_else(|| "failed to resolve home directory".to_string())?;
     let normalized_host = host.trim().trim_end_matches('/').to_string();
@@ -590,7 +621,12 @@ pub async fn sync_cli_config(
         "codex-cli" => {
             let auth_path = get_codex_auth_path(&home_dir);
             let config_path = get_codex_config_path(&home_dir);
-            capture_backups_if_missing(&app, &tool, &[auth_path.clone(), config_path.clone()])?;
+            let models_path = get_codex_models_path(&home_dir);
+            capture_backups_if_missing(
+                &app,
+                &tool,
+                &[auth_path.clone(), config_path.clone(), models_path.clone()],
+            )?;
 
             let mut auth_json = if auth_path.exists() {
                 fs::read_to_string(&auth_path)
@@ -616,25 +652,55 @@ pub async fn sync_cli_config(
                 &auth_json,
             )?;
 
-            let config_toml = format!(
-                r#"model_provider = "nyro"
-model = "{}"
-model_reasoning_effort = "high"
-disable_response_storage = true
-
-[model_providers.nyro]
-name = "Nyro Gateway"
-base_url = "{}/v1"
-wire_api = "responses"
-requires_openai_auth = true
-"#,
-                normalized_model,
-                normalized_host
-            );
+            let caps = capabilities.unwrap_or_default();
+            let mut config_lines = vec![
+                r#"model_provider = "nyro""#.to_string(),
+                format!(r#"model = "{}""#, normalized_model),
+            ];
+            if caps.reasoning.unwrap_or(false) {
+                config_lines.push(r#"model_reasoning_effort = "high""#.to_string());
+            }
+            if let Some(context_window) = caps.context_window.filter(|v| *v > 0) {
+                config_lines.push(format!(r#"model_context_window = {context_window}"#));
+            }
+            config_lines.push(r#"disable_response_storage = true"#.to_string());
+            config_lines.push(format!(
+                r#"model_catalog_json = "{}""#,
+                models_path.to_string_lossy()
+            ));
+            config_lines.push(String::new());
+            config_lines.push(r#"[model_providers.nyro]"#.to_string());
+            config_lines.push(r#"name = "Nyro Gateway""#.to_string());
+            config_lines.push(format!(r#"base_url = "{}/v1""#, normalized_host));
+            config_lines.push(r#"wire_api = "responses""#.to_string());
+            config_lines.push(r#"requires_openai_auth = true"#.to_string());
+            config_lines.push(String::new());
+            let config_toml = config_lines.join("\n");
             write_text_file(&config_path, &config_toml)?;
+
+            let models_json = serde_json::json!({
+                "models": [
+                    {
+                        "slug": normalized_model,
+                        "display_name": model.trim(),
+                        "supported_reasoning_levels": [],
+                        "shell_type": "shell_command",
+                        "visibility": "list",
+                        "supported_in_api": true,
+                        "priority": 1,
+                        "supports_reasoning_summaries": false,
+                        "support_verbosity": false,
+                        "apply_patch_tool_type": "freeform",
+                        "supports_parallel_tool_calls": false,
+                        "context_window": caps.context_window.filter(|v| *v > 0).unwrap_or(128_000),
+                    }
+                ]
+            });
+            write_json_file(&models_path, &models_json)?;
             Ok(vec![
                 auth_path.to_string_lossy().to_string(),
                 config_path.to_string_lossy().to_string(),
+                models_path.to_string_lossy().to_string(),
             ])
         }
         "gemini-cli" => {

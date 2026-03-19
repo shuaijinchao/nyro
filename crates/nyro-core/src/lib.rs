@@ -58,6 +58,14 @@ impl Gateway {
             log_tx,
         };
 
+        {
+            let data_dir = gw.config.data_dir.clone();
+            let http_client = gw.http_client.clone();
+            tokio::spawn(async move {
+                admin::refresh_models_dev_runtime_cache_on_startup(data_dir, http_client).await;
+            });
+        }
+
         Ok((gw, log_rx))
     }
 

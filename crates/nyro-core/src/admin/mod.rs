@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
@@ -6,6 +8,12 @@ use sqlx::Row;
 
 use crate::db::models::*;
 use crate::Gateway;
+
+const MODELS_DEV_SNAPSHOT: &str = include_str!("../../assets/models.dev.json");
+const PROVIDER_PRESETS_SNAPSHOT: &str = include_str!("../../assets/providers.json");
+const MODELS_DEV_RUNTIME_FILE: &str = "models.dev.json";
+const MODELS_DEV_SOURCE_URL: &str = "https://models.dev/api.json";
+const MODELS_DEV_RUNTIME_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone)]
 pub struct AdminService {
@@ -21,16 +29,20 @@ impl AdminService {
 
     pub async fn list_providers(&self) -> anyhow::Result<Vec<Provider>> {
         let rows = sqlx::query_as::<_, Provider>(
-            "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at FROM providers ORDER BY created_at DESC",
+            "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, COALESCE(models_source, models_endpoint) AS models_source, capabilities_source, static_models, api_key, last_test_success, last_test_at, is_active, created_at, updated_at FROM providers ORDER BY created_at DESC",
         )
         .fetch_all(&self.gw.db)
         .await?;
         Ok(rows)
     }
 
+    pub async fn list_provider_presets(&self) -> anyhow::Result<Vec<Value>> {
+        parse_provider_presets_snapshot()
+    }
+
     pub async fn get_provider(&self, id: &str) -> anyhow::Result<Provider> {
         let row = sqlx::query_as::<_, Provider>(
-            "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, static_models, api_key, is_active, created_at, updated_at FROM providers WHERE id = ?",
+            "SELECT id, name, vendor, protocol, base_url, preset_key, COALESCE(channel, region) AS channel, models_endpoint, COALESCE(models_source, models_endpoint) AS models_source, capabilities_source, static_models, api_key, last_test_success, last_test_at, is_active, created_at, updated_at FROM providers WHERE id = ?",
         )
         .bind(id)
         .fetch_one(&self.gw.db)
@@ -43,8 +55,11 @@ impl AdminService {
         let name = normalize_name(&input.name, "provider name")?;
         self.ensure_provider_name_unique(None, &name).await?;
         let vendor = normalize_vendor(input.vendor.as_deref());
+        let models_source = input
+            .effective_models_source()
+            .map(ToString::to_string);
         sqlx::query(
-            "INSERT INTO providers (id, name, vendor, protocol, base_url, preset_key, channel, models_endpoint, static_models, api_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO providers (id, name, vendor, protocol, base_url, preset_key, channel, models_endpoint, models_source, capabilities_source, static_models, api_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&name)
@@ -53,7 +68,9 @@ impl AdminService {
         .bind(&input.base_url)
         .bind(&input.preset_key)
         .bind(&input.channel)
-        .bind(&input.models_endpoint)
+        .bind(&models_source)
+        .bind(&models_source)
+        .bind(&input.capabilities_source)
         .bind(&input.static_models)
         .bind(&input.api_key)
         .execute(&self.gw.db)
@@ -69,6 +86,9 @@ impl AdminService {
     ) -> anyhow::Result<Provider> {
         let current = self.get_provider(id).await?;
         let current_base_url = current.base_url.clone();
+        let models_source_input = input
+            .effective_models_source()
+            .map(ToString::to_string);
 
         let name = normalize_name(&input.name.unwrap_or(current.name), "provider name")?;
         self.ensure_provider_name_unique(Some(id), &name).await?;
@@ -77,18 +97,28 @@ impl AdminService {
         } else {
             normalize_vendor(current.vendor.as_deref())
         };
+        let models_source = models_source_input
+            .or_else(|| {
+                current
+                    .models_source
+                    .as_deref()
+                    .or(current.models_endpoint.as_deref())
+                    .map(ToString::to_string)
+            });
         let protocol = input.protocol.unwrap_or(current.protocol);
         let base_url = input.base_url.unwrap_or(current.base_url);
         let preset_key = input.preset_key.or(current.preset_key);
         let channel = input.channel.or(current.channel);
-        let models_endpoint = input.models_endpoint.or(current.models_endpoint);
+        let capabilities_source = input
+            .capabilities_source
+            .or(current.capabilities_source);
         let static_models = input.static_models.or(current.static_models);
         let api_key = input.api_key.unwrap_or(current.api_key);
         let is_active = input.is_active.unwrap_or(current.is_active);
         let base_url_changed = base_url != current_base_url;
 
         sqlx::query(
-            "UPDATE providers SET name=?, vendor=?, protocol=?, base_url=?, preset_key=?, channel=?, models_endpoint=?, static_models=?, api_key=?, is_active=?, updated_at=datetime('now') WHERE id=?",
+            "UPDATE providers SET name=?, vendor=?, protocol=?, base_url=?, preset_key=?, channel=?, models_endpoint=?, models_source=?, capabilities_source=?, static_models=?, api_key=?, is_active=?, updated_at=datetime('now') WHERE id=?",
         )
         .bind(&name)
         .bind(&vendor)
@@ -96,7 +126,9 @@ impl AdminService {
         .bind(&base_url)
         .bind(&preset_key)
         .bind(&channel)
-        .bind(&models_endpoint)
+        .bind(&models_source)
+        .bind(&models_source)
+        .bind(&capabilities_source)
         .bind(&static_models)
         .bind(&api_key)
         .bind(is_active)
@@ -127,57 +159,80 @@ impl AdminService {
             .await;
         let start = Instant::now();
         let base_url = provider.base_url.trim();
-        if base_url.is_empty() {
-            return Ok(TestResult {
+        let result = if base_url.is_empty() {
+            TestResult {
                 success: false,
                 latency_ms: 0,
                 model: None,
                 error: Some("Base URL is empty".to_string()),
-            });
-        }
-
-        if reqwest::Url::parse(base_url).is_err() {
-            return Ok(TestResult {
+            }
+        } else if reqwest::Url::parse(base_url).is_err() {
+            TestResult {
                 success: false,
                 latency_ms: 0,
                 model: None,
                 error: Some("Base URL format is invalid".to_string()),
-            });
-        }
-
-        match self
-            .gw
-            .http_client
-            .get(base_url)
-            .timeout(Duration::from_secs(10))
-            .send()
-            .await
-        {
+            }
+        } else {
+            match self
+                .gw
+                .http_client
+                .get(base_url)
+                .timeout(Duration::from_secs(10))
+                .send()
+                .await
+            {
             // Any HTTP response means the endpoint is reachable, including 4xx.
-            Ok(_) => Ok(TestResult {
+            Ok(_) => TestResult {
                 success: true,
                 latency_ms: start.elapsed().as_millis() as u64,
                 model: None,
                 error: None,
-            }),
-            Err(e) => Ok(TestResult {
+            },
+            Err(e) => TestResult {
                 success: false,
                 latency_ms: start.elapsed().as_millis() as u64,
                 model: None,
                 error: Some(format_connectivity_error(&e)),
-            }),
+            },
         }
+        };
+        self.record_provider_test_result(&provider.id, &result).await?;
+        Ok(result)
+    }
+
+    async fn record_provider_test_result(
+        &self,
+        provider_id: &str,
+        result: &TestResult,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            "UPDATE providers \
+             SET last_test_success = ?, last_test_at = datetime('now') \
+             WHERE id = ?",
+        )
+        .bind(result.success)
+        .bind(provider_id)
+        .execute(&self.gw.db)
+        .await?;
+        Ok(())
     }
 
     pub async fn test_provider_models(&self, id: &str) -> anyhow::Result<Vec<String>> {
         let provider = self.get_provider(id).await?;
         let endpoint = provider
-            .models_endpoint
-            .as_ref()
-            .map(|value| value.trim())
+            .effective_models_source()
+            .map(str::trim)
             .filter(|value| !value.is_empty())
             .ok_or_else(|| anyhow::anyhow!("Model Discovery URL is empty"))?
             .to_string();
+
+        if let Some(models) = lookup_models_dev_models(&self.gw.config.data_dir, &endpoint)? {
+            if models.is_empty() {
+                anyhow::bail!("Model list format is invalid or empty");
+            }
+            return Ok(models);
+        }
 
         let mut request = self
             .gw
@@ -216,6 +271,12 @@ impl AdminService {
         let provider = self.get_provider(id).await?;
 
         if let Some(endpoint) = resolve_models_endpoint(&provider) {
+            if let Some(models) = lookup_models_dev_models(&self.gw.config.data_dir, &endpoint)? {
+                if !models.is_empty() {
+                    return Ok(models);
+                }
+            }
+
             let mut request = self
                 .gw
                 .http_client
@@ -242,6 +303,107 @@ impl AdminService {
         }
 
         Ok(parse_static_models(provider.static_models.as_deref()))
+    }
+
+    pub async fn get_model_capabilities(
+        &self,
+        provider_id: &str,
+        model: &str,
+    ) -> anyhow::Result<ModelCapabilities> {
+        let provider = self.get_provider(provider_id).await?;
+        let trimmed_model = model.trim();
+        if trimmed_model.is_empty() {
+            anyhow::bail!("model cannot be empty");
+        }
+        self.resolve_provider_model_capabilities(&provider, trimmed_model).await
+    }
+
+    async fn resolve_provider_model_capabilities(
+        &self,
+        provider: &Provider,
+        model: &str,
+    ) -> anyhow::Result<ModelCapabilities> {
+        let source = provider
+            .capabilities_source
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("");
+
+        match parse_source(source) {
+            ResolvedSource::ModelsDev(vendor_key) => {
+                let matched = lookup_models_dev_capability(&self.gw.config.data_dir, vendor_key, model);
+                matched.ok_or_else(|| anyhow::anyhow!("no matched model capabilities found in models.dev"))
+            }
+            ResolvedSource::Http(url) => {
+                if is_ollama_show_endpoint(url) {
+                    self.query_ollama_show_capability(url, model).await
+                } else {
+                    self.query_http_capability(provider, url, model).await
+                }
+            }
+            ResolvedSource::Auto => Ok(
+                fuzzy_match_models_dev(&self.gw.config.data_dir, model)
+                    .ok_or_else(|| anyhow::anyhow!("no matched model capabilities found in auto mode"))?,
+            ),
+        }
+    }
+
+    async fn query_http_capability(
+        &self,
+        provider: &Provider,
+        url: &str,
+        model: &str,
+    ) -> anyhow::Result<ModelCapabilities> {
+        let mut request = self
+            .gw
+            .http_client
+            .get(url)
+            .headers(build_model_headers(&provider.protocol, &provider.api_key)?)
+            .timeout(Duration::from_secs(10));
+
+        if provider.protocol == "gemini" {
+            let separator = if url.contains('?') { '&' } else { '?' };
+            request = self
+                .gw
+                .http_client
+                .get(format!("{url}{separator}key={}", provider.api_key))
+                .timeout(Duration::from_secs(10));
+        }
+
+        let resp = request
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!(format_connectivity_error(&e)))?;
+        if !resp.status().is_success() {
+            anyhow::bail!("capability source returned status {}", resp.status());
+        }
+        let json: Value = resp.json().await.unwrap_or_default();
+        if let Some(cap) = parse_http_capability(&json, model) {
+            return Ok(cap);
+        }
+        anyhow::bail!("no matched model capabilities found from capability source")
+    }
+
+    async fn query_ollama_show_capability(
+        &self,
+        url: &str,
+        model: &str,
+    ) -> anyhow::Result<ModelCapabilities> {
+        let resp = self
+            .gw
+            .http_client
+            .post(url)
+            .json(&serde_json::json!({ "name": model }))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!(format_connectivity_error(&e)))?;
+        if !resp.status().is_success() {
+            anyhow::bail!("ollama /api/show returned status {}", resp.status());
+        }
+        let json: Value = resp.json().await.unwrap_or_default();
+        Ok(parse_ollama_capability(&json, model))
     }
 
     // ── Routes ──
@@ -684,6 +846,8 @@ impl AdminService {
                     preset_key: p.preset_key,
                     channel: p.channel,
                     models_endpoint: p.models_endpoint,
+                    models_source: p.models_source,
+                    capabilities_source: p.capabilities_source,
                     static_models: p.static_models,
                     api_key: p.api_key,
                     is_active: p.is_active,
@@ -729,6 +893,8 @@ impl AdminService {
                         preset_key: p.preset_key.clone(),
                         channel: p.channel.clone(),
                         models_endpoint: p.models_endpoint.clone(),
+                        models_source: p.models_source.clone(),
+                        capabilities_source: p.capabilities_source.clone(),
                         static_models: p.static_models.clone(),
                         api_key: p.api_key.clone(),
                     })
@@ -1006,7 +1172,7 @@ fn normalize_vendor(vendor: Option<&str>) -> Option<String> {
 }
 
 fn resolve_models_endpoint(provider: &Provider) -> Option<String> {
-    if let Some(endpoint) = provider.models_endpoint.as_ref() {
+    if let Some(endpoint) = provider.effective_models_source() {
         let trimmed = endpoint.trim();
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
@@ -1089,4 +1255,420 @@ fn parse_static_models(raw: Option<&str>) -> Vec<String> {
     models.sort();
     models.dedup();
     models
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ResolvedSource<'a> {
+    Http(&'a str),
+    ModelsDev(&'a str),
+    Auto,
+}
+
+fn parse_source(uri: &str) -> ResolvedSource<'_> {
+    let trimmed = uri.trim();
+    if trimmed.is_empty() {
+        ResolvedSource::Auto
+    } else if trimmed.eq_ignore_ascii_case("ai://models.dev") {
+        ResolvedSource::ModelsDev("")
+    } else if let Some(key) = trimmed.strip_prefix("ai://models.dev/") {
+        ResolvedSource::ModelsDev(key)
+    } else {
+        ResolvedSource::Http(trimmed)
+    }
+}
+
+fn is_ollama_show_endpoint(url: &str) -> bool {
+    url.trim_end_matches('/').ends_with("/api/show")
+}
+
+fn parse_ollama_capability(json: &Value, model: &str) -> ModelCapabilities {
+    let caps = json
+        .get("capabilities")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let has_vision = caps.iter().any(|c| c.eq_ignore_ascii_case("vision"));
+    let context_window = json
+        .get("model_info")
+        .and_then(Value::as_object)
+        .and_then(extract_ollama_context_window)
+        .unwrap_or(8 * 1024);
+
+    ModelCapabilities {
+        provider: "ollama".to_string(),
+        model_id: model.to_string(),
+        context_window,
+        output_max_tokens: None,
+        tool_call: caps.iter().any(|c| c == "tools"),
+        reasoning: caps.iter().any(|c| c == "thinking"),
+        input_modalities: if has_vision {
+            vec!["text".to_string(), "image".to_string()]
+        } else {
+            vec!["text".to_string()]
+        },
+        output_modalities: vec!["text".to_string()],
+        input_cost: Some(0.0),
+        output_cost: Some(0.0),
+    }
+}
+
+fn extract_ollama_context_window(model_info: &serde_json::Map<String, Value>) -> Option<u64> {
+    let arch = model_info.get("general.architecture")?.as_str()?;
+    let key = format!("{arch}.context_length");
+    model_info
+        .get(&key)
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+}
+
+pub async fn refresh_models_dev_runtime_cache_if_stale(
+    data_dir: PathBuf,
+    http_client: reqwest::Client,
+) {
+    if let Err(err) = refresh_models_dev_runtime_cache_inner(&data_dir, &http_client, false).await {
+        tracing::warn!("models.dev runtime refresh skipped: {err}");
+    }
+}
+
+pub async fn refresh_models_dev_runtime_cache_on_startup(
+    data_dir: PathBuf,
+    http_client: reqwest::Client,
+) {
+    if let Err(err) = refresh_models_dev_runtime_cache_inner(&data_dir, &http_client, true).await {
+        tracing::warn!("models.dev startup refresh failed, fallback to local cache/snapshot: {err}");
+    }
+}
+
+fn models_dev_runtime_cache_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(MODELS_DEV_RUNTIME_FILE)
+}
+
+async fn refresh_models_dev_runtime_cache_inner(
+    data_dir: &Path,
+    http_client: &reqwest::Client,
+    force_refresh: bool,
+) -> anyhow::Result<()> {
+    let cache_path = models_dev_runtime_cache_path(data_dir);
+    if !force_refresh {
+        if let Ok(meta) = std::fs::metadata(&cache_path) {
+            if let Ok(modified_at) = meta.modified() {
+                if let Ok(elapsed) = modified_at.elapsed() {
+                    if elapsed < MODELS_DEV_RUNTIME_TTL {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+
+    let resp = http_client
+        .get(MODELS_DEV_SOURCE_URL)
+        .timeout(Duration::from_secs(20))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("request models.dev failed: {e}"))?;
+    if !resp.status().is_success() {
+        anyhow::bail!("models.dev returned status {}", resp.status());
+    }
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| anyhow::anyhow!("read models.dev body failed: {e}"))?;
+
+    // Validate payload shape before replacing local cache.
+    let _: HashMap<String, ModelsDevVendor> = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("invalid models.dev payload: {e}"))?;
+
+    std::fs::create_dir_all(data_dir)?;
+    let tmp_path = data_dir.join(format!("{MODELS_DEV_RUNTIME_FILE}.tmp"));
+    std::fs::write(&tmp_path, body.as_bytes())?;
+    std::fs::rename(&tmp_path, &cache_path)?;
+    Ok(())
+}
+
+fn parse_provider_presets_snapshot() -> anyhow::Result<Vec<Value>> {
+    let parsed = serde_json::from_str::<Value>(PROVIDER_PRESETS_SNAPSHOT)
+        .map_err(|e| anyhow::anyhow!("invalid providers preset snapshot: {e}"))?;
+    let Some(items) = parsed.as_array() else {
+        anyhow::bail!("invalid providers preset snapshot: root must be array");
+    };
+    Ok(items.clone())
+}
+
+fn parse_models_dev_data(data_dir: &Path) -> anyhow::Result<HashMap<String, ModelsDevVendor>> {
+    let cache_path = models_dev_runtime_cache_path(data_dir);
+    if let Ok(content) = std::fs::read_to_string(&cache_path) {
+        if let Ok(parsed) = serde_json::from_str::<HashMap<String, ModelsDevVendor>>(&content) {
+            return Ok(parsed);
+        }
+        tracing::warn!(
+            "invalid models.dev runtime cache at {}, fallback to embedded snapshot",
+            cache_path.display()
+        );
+    }
+    parse_models_dev_snapshot()
+}
+
+fn lookup_models_dev_models(data_dir: &Path, source: &str) -> anyhow::Result<Option<Vec<String>>> {
+    let ResolvedSource::ModelsDev(vendor_key) = parse_source(source) else {
+        return Ok(None);
+    };
+    let data = parse_models_dev_data(data_dir)?;
+    if vendor_key.trim().is_empty() {
+        let mut models = data
+            .values()
+            .flat_map(|vendor| vendor.models.keys().cloned())
+            .collect::<Vec<_>>();
+        models.sort();
+        models.dedup();
+        return Ok(Some(models));
+    }
+    let Some(vendor) = data.get(vendor_key) else {
+        return Ok(Some(Vec::new()));
+    };
+    let mut models = vendor.models.keys().cloned().collect::<Vec<_>>();
+    models.sort();
+    Ok(Some(models))
+}
+
+fn lookup_models_dev_capability(
+    data_dir: &Path,
+    vendor_key: &str,
+    model: &str,
+) -> Option<ModelCapabilities> {
+    let data = parse_models_dev_data(data_dir).ok()?;
+    match_models_dev_capability(&data, vendor_key, model)
+}
+
+fn fuzzy_match_models_dev(data_dir: &Path, model: &str) -> Option<ModelCapabilities> {
+    let data = parse_models_dev_data(data_dir).ok()?;
+    match_models_dev_capability(&data, "", model)
+}
+
+fn match_models_dev_capability(
+    data: &HashMap<String, ModelsDevVendor>,
+    vendor_key: &str,
+    model: &str,
+) -> Option<ModelCapabilities> {
+    let needle = model.trim().to_lowercase();
+    if needle.is_empty() {
+        return None;
+    }
+
+    if vendor_key.trim().is_empty() {
+        for (vk, vendor) in data {
+            for (model_id, entry) in &vendor.models {
+                if model_id.eq_ignore_ascii_case(model) {
+                    return Some(to_models_dev_capability(vk, entry));
+                }
+            }
+        }
+        let mut best: Option<(usize, ModelCapabilities)> = None;
+        for (vk, vendor) in data {
+            for (model_id, entry) in &vendor.models {
+                if model_id.to_lowercase().contains(&needle) {
+                    let cap = to_models_dev_capability(vk, entry);
+                    let len = model_id.len();
+                    let replace = best.as_ref().map(|(prev_len, _)| len < *prev_len).unwrap_or(true);
+                    if replace {
+                        best = Some((len, cap));
+                    }
+                }
+            }
+        }
+        return best.map(|(_, cap)| cap);
+    }
+
+    let vendor = data.get(vendor_key)?;
+    for (model_id, entry) in &vendor.models {
+        if model_id.eq_ignore_ascii_case(model) {
+            return Some(to_models_dev_capability(vendor_key, entry));
+        }
+    }
+    let mut best: Option<(usize, ModelCapabilities)> = None;
+    for (model_id, entry) in &vendor.models {
+        if model_id.to_lowercase().contains(&needle) {
+            let cap = to_models_dev_capability(vendor_key, entry);
+            let len = model_id.len();
+            let replace = best.as_ref().map(|(prev_len, _)| len < *prev_len).unwrap_or(true);
+            if replace {
+                best = Some((len, cap));
+            }
+        }
+    }
+    best.map(|(_, cap)| cap)
+}
+
+fn parse_http_capability(json: &Value, model: &str) -> Option<ModelCapabilities> {
+    let arr = json.get("data").and_then(Value::as_array)?;
+    let item = arr.iter().find(|entry| {
+        entry
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| id.eq_ignore_ascii_case(model))
+    })?;
+
+    let model_id = item.get("id").and_then(Value::as_str).unwrap_or(model);
+    let context_window = item
+        .get("context_length")
+        .and_then(Value::as_u64)
+        .filter(|v| *v > 0)
+        .unwrap_or(128 * 1024);
+    let output_max_tokens = item
+        .get("top_provider")
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.get("max_completion_tokens"))
+        .and_then(Value::as_u64)
+        .filter(|v| *v > 0);
+    let supported_parameters = item
+        .get("supported_parameters")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let input_modalities = item
+        .get("architecture")
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.get("input_modalities"))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec!["text".to_string()]);
+    let output_modalities = item
+        .get("architecture")
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.get("output_modalities"))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec!["text".to_string()]);
+    let input_cost = item
+        .get("pricing")
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.get("prompt"))
+        .and_then(parse_maybe_price_per_token);
+    let output_cost = item
+        .get("pricing")
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.get("completion"))
+        .and_then(parse_maybe_price_per_token);
+    let tool_call = supported_parameters.iter().any(|v| v.as_str() == Some("tools"));
+    let model_lower = model_id.to_lowercase();
+    let reasoning = model_lower.contains("reason")
+        || model_lower.contains("thinking")
+        || model_lower.contains("o1")
+        || model_lower.contains("o3")
+        || model_lower.contains("o4");
+
+    Some(ModelCapabilities {
+        provider: "openrouter".to_string(),
+        model_id: model_id.to_string(),
+        context_window,
+        output_max_tokens,
+        tool_call,
+        reasoning,
+        input_modalities,
+        output_modalities,
+        input_cost,
+        output_cost,
+    })
+}
+
+fn parse_maybe_price_per_token(value: &Value) -> Option<f64> {
+    let parsed = if let Some(v) = value.as_f64() {
+        Some(v)
+    } else if let Some(s) = value.as_str() {
+        s.parse::<f64>().ok()
+    } else {
+        None
+    }?;
+    if parsed <= 0.0 {
+        return None;
+    }
+    Some(parsed * 1_000_000.0)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ModelsDevVendor {
+    #[serde(default)]
+    models: HashMap<String, ModelsDevModelEntry>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ModelsDevModelEntry {
+    id: String,
+    #[serde(default)]
+    reasoning: bool,
+    #[serde(default)]
+    tool_call: bool,
+    #[serde(default)]
+    modalities: ModelsDevModalities,
+    #[serde(default)]
+    cost: ModelsDevCost,
+    #[serde(default)]
+    limit: ModelsDevLimit,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+struct ModelsDevModalities {
+    #[serde(default)]
+    input: Vec<String>,
+    #[serde(default)]
+    output: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+struct ModelsDevCost {
+    input: Option<f64>,
+    output: Option<f64>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+struct ModelsDevLimit {
+    context: Option<u64>,
+    output: Option<u64>,
+}
+
+fn parse_models_dev_snapshot() -> anyhow::Result<HashMap<String, ModelsDevVendor>> {
+    let parsed = serde_json::from_str::<HashMap<String, ModelsDevVendor>>(MODELS_DEV_SNAPSHOT)
+        .map_err(|e| anyhow::anyhow!("failed to parse models.dev snapshot: {e}"))?;
+    Ok(parsed)
+}
+
+fn to_models_dev_capability(vendor_key: &str, model: &ModelsDevModelEntry) -> ModelCapabilities {
+    let input_modalities = if model.modalities.input.is_empty() {
+        vec!["text".to_string()]
+    } else {
+        model.modalities.input.clone()
+    };
+    let output_modalities = if model.modalities.output.is_empty() {
+        vec!["text".to_string()]
+    } else {
+        model.modalities.output.clone()
+    };
+
+    ModelCapabilities {
+        provider: vendor_key.to_string(),
+        model_id: model.id.clone(),
+        context_window: model.limit.context.filter(|v| *v > 0).unwrap_or(128 * 1024),
+        output_max_tokens: model.limit.output.filter(|v| *v > 0),
+        tool_call: model.tool_call,
+        reasoning: model.reasoning,
+        input_modalities,
+        output_modalities,
+        input_cost: model.cost.input,
+        output_cost: model.cost.output,
+    }
 }
