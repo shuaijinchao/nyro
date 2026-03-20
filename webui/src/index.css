@@ -572,7 +572,20 @@ body {
 .provider-preset-label {
   font-size: 0.9rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.2;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-preset-label-compact {
+  font-size: 0.8rem;
+}
+
+.provider-preset-label-micro {
+  font-size: 0.72rem;
 }
 
 .provider-region-group {

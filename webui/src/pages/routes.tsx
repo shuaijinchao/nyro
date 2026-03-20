@@ -48,7 +48,7 @@ function FieldLabel({ children }: { children: string }) {
 function ModelCapabilitiesPanel({ caps, isZh }: { caps: ModelCapabilities; isZh: boolean }) {
   const formatCost = (value?: number | null) => {
     if (value == null) return null;
-    if (value <= 0) return isZh ? "本地免费" : "Local free";
+    if (value <= 0) return "$0.0/M";
     return `$${value}/M`;
   };
 
@@ -293,7 +293,15 @@ export default function RoutesPage() {
 
   function setEditTargetModel(nextTargetModel: string) {
     setEditCapsQueryModel("");
-    setEditForm((prev) => (prev ? { ...prev, target_model: nextTargetModel } : prev));
+    setEditForm((prev) => {
+      if (!prev) return prev;
+      const shouldInherit = !prev.virtual_model.trim();
+      return {
+        ...prev,
+        target_model: nextTargetModel,
+        virtual_model: shouldInherit ? nextTargetModel : prev.virtual_model,
+      };
+    });
   }
 
   function selectCreateTargetModel(nextTargetModel: string) {
@@ -550,7 +558,6 @@ export default function RoutesPage() {
                                   ...prev,
                                   target_provider: value,
                                   target_model: "",
-                                  virtual_model: "",
                                 }
                               : prev;
                           })

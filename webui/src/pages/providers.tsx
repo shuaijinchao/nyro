@@ -119,6 +119,13 @@ function presetLabel(preset: ProviderPreset, isZh: boolean) {
   return isZh ? preset.label.zh : preset.label.en;
 }
 
+function presetLabelClass(preset: ProviderPreset, isZh: boolean) {
+  const len = presetLabel(preset, isZh).trim().length;
+  if (len >= 16) return "provider-preset-label provider-preset-label-micro";
+  if (len >= 12) return "provider-preset-label provider-preset-label-compact";
+  return "provider-preset-label";
+}
+
 function channelLabel(channel: ProviderChannelPreset, isZh: boolean) {
   return isZh ? channel.label.zh : channel.label.en;
 }
@@ -197,12 +204,14 @@ function resolvePresetConfig(
   const baseUrl = rawBaseUrl ? toGatewayBaseUrl(rawBaseUrl) : "";
   const modelsSource = channel?.modelsSource ?? channel?.modelsEndpoint ?? "";
   const capabilitiesSource = channel?.capabilitiesSource ?? "";
+  const apiKey = channel?.apiKey ?? "";
   const staticModels = joinStaticModels(channel?.staticModels);
 
   return {
     baseUrl,
     modelsSource,
     capabilitiesSource,
+    apiKey,
     staticModels,
     channel,
   };
@@ -298,7 +307,7 @@ export default function ProvidersPage() {
   const [testTarget, setTestTarget] = useState<Provider | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<Provider | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState(DEFAULT_PRESET_ID);
-  const [showCreateApiKey, setShowCreateApiKey] = useState(false);
+  const [showCreateApiKey, setShowCreateApiKey] = useState(true);
   const [showEditApiKey, setShowEditApiKey] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ title: string; description?: string } | null>(null);
   const activeTestRunRef = useRef(0);
@@ -571,6 +580,7 @@ export default function ProvidersPage() {
       models_endpoint: config.modelsSource,
       capabilities_source: config.capabilitiesSource,
       static_models: config.staticModels,
+      api_key: config.apiKey || prev.api_key,
     }));
   }
 
@@ -591,6 +601,7 @@ export default function ProvidersPage() {
       models_endpoint: config.modelsSource,
       capabilities_source: config.capabilitiesSource,
       static_models: config.staticModels,
+      api_key: config.apiKey || prev.api_key,
     }));
   }
 
@@ -620,6 +631,7 @@ export default function ProvidersPage() {
               models_endpoint: config.modelsSource,
               capabilities_source: config.capabilitiesSource,
               static_models: config.staticModels,
+              api_key: config.apiKey || prev.api_key,
             };
           })()
         : prev,
@@ -628,7 +640,7 @@ export default function ProvidersPage() {
 
   function closeCreateForm() {
     setShowForm(false);
-    setShowCreateApiKey(false);
+    setShowCreateApiKey(true);
     setSelectedPresetId(DEFAULT_PRESET_ID);
     setForm(emptyCreate);
   }
@@ -693,6 +705,7 @@ export default function ProvidersPage() {
               return;
             }
             setShowForm(true);
+            setShowCreateApiKey(true);
             handlePresetChange(DEFAULT_PRESET_ID);
           }}
           className="flex items-center gap-2"
@@ -761,7 +774,7 @@ export default function ProvidersPage() {
                       />
                     </>
                   )}
-                  <span className="provider-preset-label">{presetLabel(preset, isZh)}</span>
+                  <span className={presetLabelClass(preset, isZh)}>{presetLabel(preset, isZh)}</span>
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -1020,7 +1033,7 @@ export default function ProvidersPage() {
                               />
                             </>
                           )}
-                          <span className="provider-preset-label">{presetLabel(preset, isZh)}</span>
+                          <span className={presetLabelClass(preset, isZh)}>{presetLabel(preset, isZh)}</span>
                         </ToggleGroupItem>
                       ))}
                     </ToggleGroup>

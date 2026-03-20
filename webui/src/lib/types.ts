@@ -135,6 +135,7 @@ export interface ProviderChannelPreset {
   baseUrls: Partial<Record<ProviderProtocol, string>>;
   modelsSource?: string;
   capabilitiesSource?: string;
+  apiKey?: string;
   modelsEndpoint?: string;
   staticModels?: string[];
 }
