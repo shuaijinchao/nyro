@@ -234,15 +234,28 @@ fn encode_message(msg: &InternalMessage) -> Result<Value> {
         Role::System => unreachable!("system handled separately"),
     };
 
+    if msg.role == Role::Tool {
+        let (tool_content, hinted_tool_use_id) = anthropic_tool_result_payload(msg);
+        let tool_use_id = msg
+            .tool_call_id
+            .clone()
+            .filter(|v| !v.trim().is_empty())
+            .or(hinted_tool_use_id)
+            .map(|v| normalize_anthropic_tool_id(&v))
+            .unwrap_or_else(|| normalize_anthropic_tool_id("tool_result"));
+        return Ok(serde_json::json!({
+            "role": role,
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": tool_content,
+            }],
+        }));
+    }
+
     let content = match &msg.content {
         MessageContent::Text(t) => {
-            if msg.tool_call_id.is_some() {
-                Value::Array(vec![serde_json::json!({
-                    "type": "tool_result",
-                    "tool_use_id": msg.tool_call_id,
-                    "content": t,
-                })])
-            } else if let Some(ref tcs) = msg.tool_calls {
+            if let Some(ref tcs) = msg.tool_calls {
                 let mut blocks: Vec<Value> = vec![];
                 if !t.is_empty() {
                     blocks.push(serde_json::json!({"type": "text", "text": t}));
@@ -252,7 +265,7 @@ fn encode_message(msg: &InternalMessage) -> Result<Value> {
                         serde_json::from_str(&tc.arguments).unwrap_or(Value::Object(Default::default()));
                     blocks.push(serde_json::json!({
                         "type": "tool_use",
-                        "id": tc.id,
+                        "id": normalize_anthropic_tool_id(&tc.id),
                         "name": tc.name,
                         "input": input,
                     }));
@@ -282,7 +295,7 @@ fn encode_message(msg: &InternalMessage) -> Result<Value> {
                     ContentBlock::ToolUse { id, name, input } => {
                         serde_json::json!({
                             "type": "tool_use",
-                            "id": id,
+                            "id": normalize_anthropic_tool_id(id),
                             "name": name,
                             "input": input,
                         })
@@ -293,7 +306,7 @@ fn encode_message(msg: &InternalMessage) -> Result<Value> {
                     } => {
                         serde_json::json!({
                             "type": "tool_result",
-                            "tool_use_id": tool_use_id,
+                            "tool_use_id": normalize_anthropic_tool_id(tool_use_id),
                             "content": content,
                         })
                     }
@@ -307,6 +320,45 @@ fn encode_message(msg: &InternalMessage) -> Result<Value> {
         "role": role,
         "content": content,
     }))
+}
+
+fn anthropic_tool_result_payload(msg: &InternalMessage) -> (Value, Option<String>) {
+    match &msg.content {
+        MessageContent::Text(t) => (Value::String(t.clone()), None),
+        MessageContent::Blocks(blocks) => {
+            for block in blocks {
+                if let ContentBlock::ToolResult { tool_use_id, content } = block {
+                    return (content.clone(), Some(tool_use_id.clone()));
+                }
+            }
+            (Value::String(msg.content.as_text()), None)
+        }
+    }
+}
+
+fn normalize_anthropic_tool_id(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "toolu_nyro".to_string();
+    }
+    if trimmed.starts_with("toolu_")
+        && trimmed
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+    {
+        return trimmed.to_string();
+    }
+    let sanitized: String = trimmed
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("toolu_{sanitized}")
 }
 
 fn normalize_anthropic_messages(messages: Vec<Value>) -> Vec<Value> {

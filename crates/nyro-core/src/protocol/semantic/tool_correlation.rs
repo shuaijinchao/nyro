@@ -47,10 +47,24 @@ pub fn normalize_request_tool_results(req: &mut InternalRequest) {
             }
         }
 
-        let hinted_name = extract_tool_name_hint(&msg.content);
+        let hinted_value = extract_tool_result_hint(&msg.content);
 
         if resolved_id.is_none() {
-            if let Some(hint) = hinted_name.clone() {
+            if let Some(hint) = hinted_value.clone() {
+                if let Some(pos) = pending_calls
+                    .iter()
+                    .position(|(pending_id, _)| pending_id == &hint)
+                {
+                    if let Some((call_id, _)) = pending_calls.remove(pos) {
+                        resolved_id = Some(call_id);
+                        has_linked_pending_call = true;
+                    }
+                }
+            }
+        }
+
+        if resolved_id.is_none() {
+            if let Some(hint) = hinted_value.clone() {
                 if let Some(pos) = pending_calls
                     .iter()
                     .position(|(_, pending_name)| pending_name.eq_ignore_ascii_case(&hint))
@@ -82,7 +96,7 @@ pub fn normalize_request_tool_results(req: &mut InternalRequest) {
 
         let final_id = resolved_id.expect("final tool_call_id should always exist");
         if !has_linked_pending_call {
-            let synth_name = hinted_name.unwrap_or_else(|| "unknown_tool".to_string());
+            let synth_name = hinted_value.unwrap_or_else(|| "unknown_tool".to_string());
             normalized_messages.push(InternalMessage {
                 role: Role::Assistant,
                 content: MessageContent::Text(String::new()),
@@ -102,7 +116,7 @@ pub fn normalize_request_tool_results(req: &mut InternalRequest) {
     req.messages = normalized_messages;
 }
 
-fn extract_tool_name_hint(content: &MessageContent) -> Option<String> {
+fn extract_tool_result_hint(content: &MessageContent) -> Option<String> {
     let MessageContent::Blocks(blocks) = content else {
         return None;
     };

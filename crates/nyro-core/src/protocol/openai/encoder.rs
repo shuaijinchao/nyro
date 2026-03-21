@@ -99,6 +99,9 @@ fn normalize_messages_for_openai(
                         generated_seq += 1;
                         tc.id = format!("call_enc_{generated_seq}");
                     }
+                    if tc.name.trim().is_empty() {
+                        tc.name = fallback_tool_name.clone();
+                    }
                     seen_tool_call_ids.insert(tc.id.clone());
                 }
             }
@@ -178,6 +181,8 @@ fn normalize_messages_for_openai(
         out.push(msg);
     }
 
+    out = prune_orphan_assistant_tool_calls(out);
+
     out.retain(|msg| {
         if msg.role != Role::Assistant {
             return true;
@@ -189,6 +194,32 @@ fn normalize_messages_for_openai(
         !msg.content.as_text().trim().is_empty()
     });
 
+    out
+}
+
+fn prune_orphan_assistant_tool_calls(messages: Vec<InternalMessage>) -> Vec<InternalMessage> {
+    let referenced_tool_ids: HashSet<String> = messages
+        .iter()
+        .filter(|m| m.role == Role::Tool)
+        .filter_map(|m| m.tool_call_id.clone())
+        .filter(|id| !id.trim().is_empty())
+        .collect();
+
+    let mut out: Vec<InternalMessage> = Vec::with_capacity(messages.len());
+    for mut msg in messages {
+        if msg.role == Role::Assistant {
+            if let Some(calls) = msg.tool_calls.take() {
+                let kept: Vec<ToolCall> = calls
+                    .into_iter()
+                    .filter(|tc| referenced_tool_ids.contains(&tc.id))
+                    .collect();
+                if !kept.is_empty() {
+                    msg.tool_calls = Some(kept);
+                }
+            }
+        }
+        out.push(msg);
+    }
     out
 }
 

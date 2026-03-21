@@ -83,6 +83,11 @@ pub struct OpenAIResponseFormatter;
 
 impl ResponseFormatter for OpenAIResponseFormatter {
     fn format_response(&self, resp: &InternalResponse) -> Value {
+        let finish_reason = if !resp.tool_calls.is_empty() {
+            Some("tool_calls")
+        } else {
+            resp.stop_reason.as_deref()
+        };
         let mut message = serde_json::json!({
             "role": "assistant",
             "content": resp.content,
@@ -116,7 +121,7 @@ impl ResponseFormatter for OpenAIResponseFormatter {
             "choices": [{
                 "index": 0,
                 "message": message,
-                "finish_reason": resp.stop_reason,
+                "finish_reason": finish_reason,
             }],
             "usage": {
                 "prompt_tokens": resp.usage.input_tokens,
@@ -339,6 +344,7 @@ pub struct OpenAIStreamFormatter {
     usage: TokenUsage,
     id: String,
     model: String,
+    saw_tool_call: bool,
 }
 
 impl OpenAIStreamFormatter {
@@ -347,6 +353,7 @@ impl OpenAIStreamFormatter {
             usage: TokenUsage::default(),
             id: format!("chatcmpl-{}", Uuid::new_v4()),
             model: String::new(),
+            saw_tool_call: false,
         }
     }
 }
@@ -386,6 +393,7 @@ impl StreamFormatter for OpenAIStreamFormatter {
                     events.push(SseEvent::new(None, chunk.to_string()));
                 }
                 StreamDelta::ToolCallStart { index, id, name } => {
+                    self.saw_tool_call = true;
                     let chunk = serde_json::json!({
                         "id": self.id,
                         "object": "chat.completion.chunk",
@@ -397,6 +405,7 @@ impl StreamFormatter for OpenAIStreamFormatter {
                     events.push(SseEvent::new(None, chunk.to_string()));
                 }
                 StreamDelta::ToolCallDelta { index, arguments } => {
+                    self.saw_tool_call = true;
                     let chunk = serde_json::json!({
                         "id": self.id,
                         "object": "chat.completion.chunk",
@@ -411,11 +420,16 @@ impl StreamFormatter for OpenAIStreamFormatter {
                     self.usage = u.clone();
                 }
                 StreamDelta::Done { stop_reason } => {
+                    let final_reason = if self.saw_tool_call {
+                        "tool_calls".to_string()
+                    } else {
+                        stop_reason.clone()
+                    };
                     let chunk = serde_json::json!({
                         "id": self.id,
                         "object": "chat.completion.chunk",
                         "model": self.model,
-                        "choices": [{"index": 0, "delta": {}, "finish_reason": stop_reason}],
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": final_reason}],
                         "usage": {
                             "prompt_tokens": self.usage.input_tokens,
                             "completion_tokens": self.usage.output_tokens,
@@ -440,20 +454,41 @@ impl StreamFormatter for OpenAIStreamFormatter {
 }
 
 fn extract_usage(v: &Value) -> TokenUsage {
-    if let Some(u) = v.get("usage") {
-        TokenUsage {
-            input_tokens: u
-                .get("prompt_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            output_tokens: u
-                .get("completion_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-        }
-    } else {
-        TokenUsage::default()
+    let usage = v.get("usage").or_else(|| v.get("usageMetadata"));
+    let Some(u) = usage else {
+        return TokenUsage::default();
+    };
+
+    let input = first_u64(
+        u,
+        &[
+            "prompt_tokens",
+            "promptTokenCount",
+            "input_tokens",
+            "inputTokenCount",
+        ],
+    )
+    .unwrap_or(0);
+    let output = first_u64(
+        u,
+        &[
+            "completion_tokens",
+            "candidatesTokenCount",
+            "output_tokens",
+            "outputTokenCount",
+        ],
+    )
+    .unwrap_or(0);
+
+    TokenUsage {
+        input_tokens: input as u32,
+        output_tokens: output as u32,
     }
+}
+
+fn first_u64(obj: &Value, keys: &[&str]) -> Option<u64> {
+    keys.iter()
+        .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
 }
 
 fn extract_reasoning_from_message(message: &Value) -> Option<String> {

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::protocol::types::*;
 use crate::protocol::*;
@@ -236,6 +237,8 @@ fn parse_gemini_chunk(chunk: &Value, deltas: &mut Vec<StreamDelta>, first: &mut 
 pub struct GeminiStreamFormatter {
     usage: TokenUsage,
     model: String,
+    tool_names: HashMap<usize, String>,
+    tool_arg_buffers: HashMap<usize, String>,
 }
 
 impl GeminiStreamFormatter {
@@ -243,6 +246,8 @@ impl GeminiStreamFormatter {
         Self {
             usage: TokenUsage::default(),
             model: String::new(),
+            tool_names: HashMap::new(),
+            tool_arg_buffers: HashMap::new(),
         }
     }
 }
@@ -274,23 +279,27 @@ impl StreamFormatter for GeminiStreamFormatter {
                     });
                     events.push(SseEvent::new(None, chunk.to_string()));
                 }
-                StreamDelta::ToolCallStart { id: _, name, .. } => {
-                    let chunk = serde_json::json!({
-                        "candidates": [{
-                            "content": {"role": "model", "parts": [{
-                                "functionCall": {"name": name, "args": {}}
-                            }]},
-                        }],
-                    });
-                    events.push(SseEvent::new(None, chunk.to_string()));
+                StreamDelta::ToolCallStart { index, id: _, name } => {
+                    self.tool_names.insert(*index, name.clone());
+                    self.tool_arg_buffers.insert(*index, String::new());
                 }
-                StreamDelta::ToolCallDelta { arguments, .. } => {
-                    let args: Value = serde_json::from_str(arguments)
-                        .unwrap_or(Value::Object(Default::default()));
+                StreamDelta::ToolCallDelta { index, arguments } => {
+                    let Some(name) = self.tool_names.get(index).cloned() else {
+                        continue;
+                    };
+                    let buf = self
+                        .tool_arg_buffers
+                        .entry(*index)
+                        .or_insert_with(String::new);
+                    buf.push_str(arguments);
+                    let Ok(args) = serde_json::from_str::<Value>(buf) else {
+                        continue;
+                    };
+                    let normalized_args = normalize_tool_args(&name, args);
                     let chunk = serde_json::json!({
                         "candidates": [{
                             "content": {"role": "model", "parts": [{
-                                "functionCall": {"name": "", "args": args}
+                                "functionCall": {"name": name, "args": normalized_args}
                             }]},
                         }],
                     });
@@ -339,18 +348,102 @@ impl StreamFormatter for GeminiStreamFormatter {
 }
 
 fn extract_gemini_usage(v: &Value) -> TokenUsage {
-    if let Some(u) = v.get("usageMetadata") {
-        TokenUsage {
-            input_tokens: u
-                .get("promptTokenCount")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            output_tokens: u
-                .get("candidatesTokenCount")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
+    let usage = v
+        .get("usageMetadata")
+        .or_else(|| v.get("usage_metadata"))
+        .or_else(|| v.get("usage"));
+    let Some(u) = usage else {
+        return TokenUsage::default();
+    };
+
+    let input = first_u64(
+        u,
+        &[
+            "promptTokenCount",
+            "prompt_tokens",
+            "inputTokenCount",
+            "input_tokens",
+        ],
+    )
+    .unwrap_or(0);
+    let output = first_u64(
+        u,
+        &[
+            "candidatesTokenCount",
+            "completion_tokens",
+            "outputTokenCount",
+            "output_tokens",
+        ],
+    )
+    .unwrap_or(0);
+
+    TokenUsage {
+        input_tokens: input as u32,
+        output_tokens: output as u32,
+    }
+}
+
+fn first_u64(obj: &Value, keys: &[&str]) -> Option<u64> {
+    keys.iter()
+        .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
+}
+
+fn normalize_tool_args(tool_name: &str, mut args: Value) -> Value {
+    let Some(obj) = args.as_object_mut() else {
+        return args;
+    };
+
+    if let Some(v) = obj.get("exclude_patterns").cloned() {
+        obj.insert(
+            "exclude_patterns".to_string(),
+            normalize_stringified_string_array(v),
+        );
+    }
+    if let Some(v) = obj.remove("exclude_pattern") {
+        let normalized = match v {
+            Value::String(s) => Value::Array(vec![Value::String(s)]),
+            other => normalize_stringified_string_array(other),
+        };
+        obj.entry("exclude_patterns".to_string())
+            .or_insert(normalized);
+    }
+
+    match tool_name {
+        "glob" => {
+            if let Some(v) = obj.remove("include_pattern") {
+                obj.entry("pattern".to_string()).or_insert(v);
+            }
+            if let Some(v) = obj.remove("path") {
+                obj.entry("root_dir".to_string()).or_insert(v);
+            }
+            if let Some(v) = obj.remove("search_root") {
+                obj.entry("root_dir".to_string()).or_insert(v);
+            }
         }
-    } else {
-        TokenUsage::default()
+        "list_directory" => {
+            if let Some(v) = obj.remove("path") {
+                obj.entry("dir_path".to_string()).or_insert(v);
+            }
+        }
+        _ => {}
+    }
+
+    args
+}
+
+fn normalize_stringified_string_array(v: Value) -> Value {
+    match v {
+        Value::String(s) => {
+            let parsed = serde_json::from_str::<Value>(&s).ok();
+            if let Some(Value::Array(arr)) = parsed {
+                let only_strings = arr.iter().all(|item| item.is_string());
+                if only_strings {
+                    return Value::Array(arr);
+                }
+            }
+            Value::String(s)
+        }
+        Value::Array(arr) => Value::Array(arr),
+        other => other,
     }
 }

@@ -58,7 +58,10 @@ impl EgressEncoder for GeminiEncoder {
                     if let Some(ref desc) = t.description {
                         d.insert("description".into(), Value::String(desc.clone()));
                     }
-                    d.insert("parameters".into(), t.parameters.clone());
+                    d.insert(
+                        "parameters".into(),
+                        sanitize_gemini_schema(&t.parameters),
+                    );
                     decl
                 })
                 .collect();
@@ -80,6 +83,30 @@ impl EgressEncoder for GeminiEncoder {
         } else {
             format!("/v1beta/models/{}:generateContent", model)
         }
+    }
+}
+
+fn sanitize_gemini_schema(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                // Gemini functionDeclarations.parameters rejects many JSON Schema keys.
+                if k == "$schema"
+                    || k == "additionalProperties"
+                    || k == "$ref"
+                    || k == "ref"
+                    || k == "definitions"
+                    || k == "$defs"
+                {
+                    continue;
+                }
+                out.insert(k.clone(), sanitize_gemini_schema(v));
+            }
+            Value::Object(out)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(sanitize_gemini_schema).collect()),
+        _ => value.clone(),
     }
 }
 
