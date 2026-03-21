@@ -19,6 +19,19 @@ const ALL_OPTION = "__all__";
 export default function LogsPage() {
   const { locale } = useLocale();
   const isZh = locale === "zh-CN";
+  const dateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(isZh ? "zh-CN" : "en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }),
+    [isZh],
+  );
 
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState<LogQuery>({ limit: PAGE_SIZE, offset: 0 });
@@ -63,6 +76,16 @@ export default function LogsPage() {
       : (filter.status_min ?? null) === 400 && (filter.status_max ?? null) == null
         ? "error"
         : ALL_OPTION;
+  const formatLogTime = (value: string | undefined) => {
+    if (!value) return "–";
+    const normalized = value.includes("T") ? value : value.replace(" ", "T");
+    const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(normalized);
+    const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      return value.replace("T", " ").slice(0, 19);
+    }
+    return dateTimeFormatter.format(parsed);
+  };
 
   return (
     <div className="space-y-5">
@@ -146,7 +169,7 @@ export default function LogsPage() {
                 {items.map((log) => (
                   <tr key={log.id} className="border-t border-slate-100 text-slate-700 hover:bg-slate-50/50">
                     <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
-                      {log.created_at?.replace("T", " ").slice(0, 19)}
+                      {formatLogTime(log.created_at)}
                     </td>
                     <td className="px-4 py-2.5 font-medium">{log.actual_model ?? "–"}</td>
                     <td className="px-4 py-2.5">{log.provider_name ?? "–"}</td>
